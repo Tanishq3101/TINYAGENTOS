@@ -5,32 +5,27 @@ Logging system for TinyAgentOS.
 
 Provides:
 - Structured logging with UTF-8 support
-- Console + file output
+- Console + file output (rotating, so it doesn't grow unbounded)
 - Windows-compatible emoji handling
+
+NOTE: earlier there was a module-level handler-creation block that ran at import
+time AND a setup_logger() function with an "already configured" guard. Both
+attached handlers to the same logger name, so the guard tripped on the
+top-level handler and setup_logger() silently returned early — the file
+handler and the UTF-8-safe handler were never actually attached. Fixed by
+having exactly one place that configures the logger.
 """
 
 import logging
+import logging.handlers
 import sys
 import os
 
 
-
-handler = logging.StreamHandler(sys.stdout)
-handler.setFormatter(logging.Formatter(
-    "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-))
-
-# Force UTF-8
-handler.stream.reconfigure(encoding='utf-8')
-
-logger = logging.getLogger("tinyagentos")
-logger.setLevel(logging.DEBUG)
-logger.addHandler(handler)
-
 class UTF8StreamHandler(logging.StreamHandler):
     """
     Custom stream handler that handles UTF-8 encoding on Windows.
-    
+
     Windows console uses cp1252 by default, which can't encode emoji.
     This handler gracefully handles encoding errors.
     """
@@ -46,8 +41,8 @@ class UTF8StreamHandler(logging.StreamHandler):
                     stream.write(msg + self.terminator)
                     stream.flush()
                 except UnicodeEncodeError:
-                    # Fallback: Remove problematic characters
-                    safe_msg = msg.encode('ascii', 'ignore').decode('ascii')
+                    # Fallback: strip characters the console codepage can't render
+                    safe_msg = msg.encode("ascii", "ignore").decode("ascii")
                     stream.write(safe_msg + self.terminator)
                     stream.flush()
             else:
@@ -64,15 +59,20 @@ def setup_logger() -> logging.Logger:
 
     Features:
     - UTF-8 compatible console output (Windows-safe)
-    - File logging with UTF-8
+    - Rotating file logging with UTF-8 (10MB per file, 5 backups)
     - Consistent formatting
+
+    Safe to call more than once — returns the existing configured logger
+    instead of stacking duplicate handlers.
     """
 
     logger = logging.getLogger("tinyagentos")
-    logger.setLevel(logging.DEBUG)
 
     if logger.handlers:
         return logger
+
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False  # don't also send records up to the root logger
 
     os.makedirs("logs", exist_ok=True)
 
@@ -80,15 +80,18 @@ def setup_logger() -> logging.Logger:
         "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
     )
 
-    # Console Handler (UTF-8 compatible)
+    # Console handler (UTF-8 compatible)
     console_handler = UTF8StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
     console_handler.setLevel(logging.INFO)
 
-    # File Handler (UTF-8 encoding)
-    file_handler = logging.FileHandler(
+    # Rotating file handler (UTF-8 encoding) — caps disk usage, unlike a plain
+    # FileHandler which grows forever
+    file_handler = logging.handlers.RotatingFileHandler(
         "logs/app.log",
-        encoding="utf-8"
+        maxBytes=10 * 1024 * 1024,  # 10 MB
+        backupCount=5,
+        encoding="utf-8",
     )
     file_handler.setFormatter(formatter)
     file_handler.setLevel(logging.DEBUG)

@@ -1,0 +1,32 @@
+# Default runtime configuration.
+# Values here are non-secret defaults; secrets always come from .env / environment
+# variables via infrastructure/config.py, never from this file.
+
+app:
+  name: TinyAgentOS
+  version: 0.1.0
+  debug: false
+
+llm:
+  model_path: ./models/phi-3-mini.Q4_K_M.gguf
+  n_ctx: 2048
+  n_threads: 4
+  temperature: 0.7
+
+server:
+  host: 0.0.0.0
+  port: 8000
+  workers: 1
+
+security:
+  require_auth: true
+  api_key_header: X-API-Key
+  jwt_algorithm: HS256
+  rate_limit_per_minute: 60
+
+database:
+  url: sqlite:///./tinyagentos.db
+
+logging:
+  level: INFO
+  format: json

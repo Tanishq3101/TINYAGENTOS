@@ -2,7 +2,7 @@
 
 from infrastructure.config import get_settings
 from infrastructure.logging import logger
-from infrastructure.security import hash_password, verify_password, create_access_token
+from infrastructure.auth import hash_password, verify_password, create_access_token
 
 settings = get_settings()
 

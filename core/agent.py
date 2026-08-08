@@ -1,22 +1,63 @@
 import json
 import re
+from typing import Optional
+
 from core.llm_runtime import LLMRuntime
+from core.memory import ConversationMemory
 from infrastructure.logging import logger
 from core.tools.registry import TOOLS
 
 
 class BaseAgent:
-    def __init__(self):
+    def __init__(
+        self,
+        session_id: str = "default",
+        memory: Optional[ConversationMemory] = None,
+        use_memory: bool = True,
+    ):
         self.llm = LLMRuntime()
+
+        # A memory can be injected directly (useful for tests, or for
+        # sharing one memory instance across multiple agents), or one
+        # is created automatically per session_id. use_memory=False
+        # gives fully stateless behavior identical to before this
+        # feature existed.
+        if memory is not None:
+            self.memory = memory
+        elif use_memory:
+            self.memory = ConversationMemory(session_id=session_id)
+        else:
+            self.memory = None
 
     # ========================================
     # 🧠 THINK
     # ========================================
     def think(self, prompt: str) -> str:
-        """Generate LLM response without tools"""
+        """Generate LLM response without tools, using recent
+        conversation history as context when memory is enabled."""
         logger.debug("Agent thinking...")
-        thought_prompt = f"Answer clearly and completely:\n\n{prompt}"
-        return self.llm.generate(thought_prompt)
+
+        context = self.memory.get_context() if self.memory else ""
+
+        if context:
+            thought_prompt = (
+                "Continue this conversation. Use the prior turns for "
+                "context, then answer the latest message clearly and "
+                "completely.\n\n"
+                f"Conversation so far:\n{context}\n\n"
+                f"User: {prompt}\n"
+                "Assistant:"
+            )
+        else:
+            thought_prompt = f"Answer clearly and completely:\n\n{prompt}"
+
+        response = self.llm.generate(thought_prompt)
+
+        if self.memory:
+            self.memory.add("user", prompt)
+            self.memory.add("assistant", response)
+
+        return response
 
     # ========================================
     # 🧰 FORMAT TOOLS
@@ -182,7 +223,6 @@ class BaseAgent:
 
             allowed = "0123456789+-*/(). "
             cleaned = "".join(c for c in expr if c in allowed)
-            # collapse extra whitespace left behind by word removal
             cleaned = re.sub(r"\s+", " ", cleaned).strip()
             return cleaned or tool_input
 
@@ -197,11 +237,6 @@ class BaseAgent:
 
         tools_text = self._format_tools()
 
-        # NOTE: avoid literal "USER:" / "OUTPUT:" labels here. Those
-        # strings mirror common few-shot transcript formatting and
-        # were priming the model to keep generating fake extra
-        # "USER: ... OUTPUT: ..." turns after its real answer, even
-        # with correct stop tokens in place.
         decision_prompt = f"""You are a strict decision engine.
 
 AVAILABLE TOOLS:
@@ -267,7 +302,16 @@ JSON:"""
                     logger.warning("Empty tool result -> fallback to LLM")
                     return self.think(prompt)
 
-                return f"Answer: {result}"
+                answer = f"Answer: {result}"
+
+                # Tool results are stored in memory too, so a
+                # follow-up like "was that hotter than yesterday?"
+                # still has the earlier answer available as context.
+                if self.memory:
+                    self.memory.add("user", prompt)
+                    self.memory.add("assistant", answer)
+
+                return answer
 
             except Exception as e:
                 logger.error(f"Tool error: {e}")

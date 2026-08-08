@@ -1,0 +1,29 @@
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  json:
+    format: "%(asctime)s %(levelname)s %(name)s %(message)s"
+  console:
+    format: "[%(asctime)s] %(levelname)s - %(name)s: %(message)s"
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: console
+    level: INFO
+  file_json:
+    class: logging.FileHandler
+    formatter: json
+    filename: logs/app.json
+    level: INFO
+
+loggers:
+  tinyagentos:
+    level: INFO
+    handlers: [console, file_json]
+    propagate: false
+
+root:
+  level: WARNING
+  handlers: [console]

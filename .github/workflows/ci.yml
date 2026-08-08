@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          environment-file: environment.yml
+          activate-environment: tinyagentos
+          python-version: "3.11"
+
+      - name: Lint (flake8)
+        shell: bash -l {0}
+        run: flake8 .
+
+      - name: Format check (black)
+        shell: bash -l {0}
+        run: black --check .
+
+      - name: Type check (mypy)
+        shell: bash -l {0}
+        run: mypy .
+
+      - name: Run tests with coverage
+        shell: bash -l {0}
+        run: pytest --cov=. --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml

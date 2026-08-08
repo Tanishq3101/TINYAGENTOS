@@ -1,0 +1,31 @@
+name: Deploy
+
+# Foundation only — actual build/push/deploy steps are wired up in Week 4
+# once docker/ and k8s/ manifests exist. Triggered manually or on version tags.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Placeholder — build step
+        run: |
+          echo "Docker build will be added in Week 4 once docker/Dockerfile exists."
+          echo "Planned: docker build -t tinyagentos:${{ github.ref_name }} -f docker/Dockerfile ."
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Placeholder — deploy step
+        run: |
+          echo "Deployment (Docker registry push / kubectl apply) will be added in Week 4."
