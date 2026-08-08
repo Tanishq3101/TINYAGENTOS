@@ -121,3 +121,6 @@ Thumbs.db
 docker/*.env
 
 tool/
+.github
+.git
+.gitignore
