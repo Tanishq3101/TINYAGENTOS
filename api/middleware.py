@@ -1,43 +1,45 @@
 # api/middleware.py
 
 """
-Request/response logging middleware.
-
-ADAPTED FROM PLAN: the plan's version imports a `StructuredLogger` class
-from infrastructure.logging and calls `logger.log_with_context(...)`.
-Neither exists in our real infrastructure/logging.py — that module exposes
-a module-level `logger` object plus `log_info`/`log_error`/etc. helper
-functions instead. Using `log_info` directly here.
+Custom middleware for TinyAgentOS API.
 """
 
 import time
-
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-
-from infrastructure.logging import log_info
+from infrastructure.logging import logger
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
-    """Logs every request and its response status/timing."""
+    """Log all HTTP requests and responses."""
 
     async def dispatch(self, request: Request, call_next):
+        """Process request and log details."""
         start_time = time.time()
 
-        log_info(
+        # Log request
+        logger.info(
             f"Request: {request.method} {request.url.path}",
-            method=request.method,
-            path=request.url.path,
-            client=request.client.host if request.client else "unknown",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "client": request.client.host if request.client else "unknown",
+            },
         )
 
+        # Process request
         response = await call_next(request)
-        process_time_ms = (time.time() - start_time) * 1000
 
-        log_info(
-            f"Response: {response.status_code}",
-            status_code=response.status_code,
-            process_time_ms=round(process_time_ms, 2),
+        # Calculate timing
+        process_time = time.time() - start_time
+
+        # Log response
+        logger.info(
+            f"Response: {response.status_code} - {process_time:.2f}s",
+            extra={
+                "status_code": response.status_code,
+                "process_time_ms": process_time * 1000,
+            },
         )
 
         return response

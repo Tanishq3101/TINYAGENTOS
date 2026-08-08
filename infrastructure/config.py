@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # Application Settings
     # -------------------------
     APP_NAME: str = "TinyAgentOS"
+    APP_VERSION: str = "0.1.0"
     DEBUG: bool = False  # default OFF — opt in per-environment via .env, never ship True
 
     # -------------------------

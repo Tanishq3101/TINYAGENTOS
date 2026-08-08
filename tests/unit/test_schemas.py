@@ -1,18 +1,31 @@
 """
-tests/test_day11_schemas.py — tests for api/schemas.py.
+tests/test_schemas.py — tests for api/schemas.py.
 
-ASSUMPTIONS (please confirm):
-- Works against either pydantic v1 or v2 — deliberately avoids
-  version-specific APIs (.dict() vs .model_dump(), etc.) and only checks
-  plain attribute values plus `pydantic.ValidationError`, which is the
-  stable cross-version error type for both.
-- TaskRequest.task_type has no enum/Literal constraint in the schema
-  itself (it's a plain `str` with a description, per the schemas.py you
-  pasted) — actual task_type validity is enforced later by
-  Orchestrator.create_task() via SUPPORTED_TASK_TYPES, not at the
-  pydantic layer. So `TaskRequest(text="x", task_type="anything")`
-  is expected to construct successfully here; that's intentional, not a
-  gap in these tests.
+Adapted to match the ACTUAL api/schemas.py you're running, which defines
+only three models: TaskRequest, TaskResponse, ExecutionResult.
+
+Removed vs. the original draft:
+- ErrorResponse, HealthResponse — these classes don't exist in
+  api/schemas.py, and nothing in api/routes.py or api/app.py constructs
+  error/health responses via a Pydantic model. Errors go through
+  FastAPI's default HTTPException(detail=...) body shape, and
+  health_check() returns a plain dict {"status", "timestamp"} with no
+  app_name field. If you later introduce these models and wire routes.py
+  to use them, tell me and I'll add matching tests back.
+- TaskResponse.completed_at — not a field on your actual TaskResponse
+  (only created_at exists, plus message/results/errors). Removed the
+  assertion on it.
+
+Works against either pydantic v1 or v2 — deliberately avoids
+version-specific APIs (.dict() vs .model_dump(), etc.) and only checks
+plain attribute values plus `pydantic.ValidationError`, which is the
+stable cross-version error type for both.
+
+TaskRequest.task_type has no enum/Literal constraint in the schema itself
+(it's a plain `str`) — actual task_type validity is presumably enforced
+later by Orchestrator.create_task(), not at the pydantic layer. So
+`TaskRequest(text="x", task_type="anything")` is expected to construct
+successfully; that's intentional, not a gap in these tests.
 """
 
 from __future__ import annotations
@@ -22,13 +35,7 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from api.schemas import (
-    ErrorResponse,
-    ExecutionResult,
-    HealthResponse,
-    TaskRequest,
-    TaskResponse,
-)
+from api.schemas import ExecutionResult, TaskRequest, TaskResponse
 
 
 # ---------------------------------------------------------------------------
@@ -80,8 +87,8 @@ def test_task_request_priority_out_of_bounds_rejected(priority: int) -> None:
 
 
 def test_task_request_task_type_is_unconstrained_string() -> None:
-    # See module docstring -- validity of task_type is enforced later by
-    # Orchestrator.create_task(), not at this schema layer.
+    # See module docstring -- validity of task_type is enforced later,
+    # not at this schema layer.
     req = TaskRequest(text="hello", task_type="not_a_real_type")
     assert req.task_type == "not_a_real_type"
 
@@ -93,8 +100,8 @@ def test_task_response_minimal_valid() -> None:
     resp = TaskResponse(task_id="abc-123", status="pending")
     assert resp.task_id == "abc-123"
     assert resp.status == "pending"
+    assert resp.message is None
     assert resp.created_at is None
-    assert resp.completed_at is None
     assert resp.results is None
     assert resp.errors is None
 
@@ -111,11 +118,12 @@ def test_task_response_full_valid() -> None:
     resp = TaskResponse(
         task_id="abc-123",
         status="completed",
+        message="Task created successfully",
         created_at=now,
-        completed_at=now,
         results={"summary": "s"},
         errors=[],
     )
+    assert resp.message == "Task created successfully"
     assert resp.results == {"summary": "s"}
     assert resp.errors == []
 
@@ -141,33 +149,3 @@ def test_execution_result_full_valid() -> None:
     assert result.summary == "a summary"
     assert result.evaluation["score"] == 9
     assert result.execution_time_ms == 123.4
-
-
-# ---------------------------------------------------------------------------
-# HealthResponse
-# ---------------------------------------------------------------------------
-def test_health_response_valid() -> None:
-    now = datetime.now(timezone.utc)
-    health = HealthResponse(status="healthy", app_name="TinyAgentOS", timestamp=now)
-    assert health.status == "healthy"
-    assert health.app_name == "TinyAgentOS"
-    assert health.timestamp == now
-
-
-def test_health_response_missing_required_field_rejected() -> None:
-    with pytest.raises(ValidationError):
-        HealthResponse(status="healthy", app_name="TinyAgentOS")  # missing timestamp
-
-
-# ---------------------------------------------------------------------------
-# ErrorResponse
-# ---------------------------------------------------------------------------
-def test_error_response_valid() -> None:
-    err = ErrorResponse(error="task_not_found", detail="Task 'x' not found")
-    assert err.error == "task_not_found"
-    assert err.detail == "Task 'x' not found"
-
-
-def test_error_response_missing_required_field_rejected() -> None:
-    with pytest.raises(ValidationError):
-        ErrorResponse(error="task_not_found")  # missing detail
