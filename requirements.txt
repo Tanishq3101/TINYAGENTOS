@@ -1,0 +1,29 @@
+# =========================
+# CORE CONFIGURATION
+# =========================
+pydantic-settings==2.3.4
+python-dotenv==1.0.1
+
+# =========================
+# SECURITY
+# =========================
+passlib[bcrypt]==1.7.4
+bcrypt==3.2.2
+python-jose[cryptography]==3.3.0
+
+# =========================
+# LLM RUNTIME
+# =========================
+llama-cpp-python==0.2.90
+
+# =========================
+# DOWNLOAD TOOL (OPTIONAL BUT RECOMMENDED)
+# =========================
+huggingface_hub==0.24.5
+
+# =========================
+# DEV + TESTING
+# =========================
+pytest==8.2.2
+black==24.4.2
+isort==5.13.2
