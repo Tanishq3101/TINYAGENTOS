@@ -55,9 +55,7 @@ class ConversationMemory:
     # Persistence
     # ------------------------------------------------------------------
     def _file_path(self) -> Path:
-        safe_id = "".join(
-            c for c in self.session_id if c.isalnum() or c in ("-", "_")
-        ) or "default"
+        safe_id = "".join(c for c in self.session_id if c.isalnum() or c in ("-", "_")) or "default"
         return self.persist_dir / f"{safe_id}.json"
 
     def _load(self) -> None:
@@ -68,13 +66,10 @@ class ConversationMemory:
             data = json.loads(path.read_text(encoding="utf-8"))
             self.entries = [MemoryEntry(**item) for item in data]
             logger.info(
-                f"Loaded {len(self.entries)} memory entries for "
-                f"session '{self.session_id}'"
+                f"Loaded {len(self.entries)} memory entries for " f"session '{self.session_id}'"
             )
         except Exception as e:
-            logger.warning(
-                f"Failed to load memory for session '{self.session_id}': {e}"
-            )
+            logger.warning(f"Failed to load memory for session '{self.session_id}': {e}")
             self.entries = []
 
     def _save(self) -> None:
@@ -87,9 +82,7 @@ class ConversationMemory:
                 encoding="utf-8",
             )
         except Exception as e:
-            logger.warning(
-                f"Failed to save memory for session '{self.session_id}': {e}"
-            )
+            logger.warning(f"Failed to save memory for session '{self.session_id}': {e}")
 
     # ------------------------------------------------------------------
     # Core API
@@ -108,7 +101,7 @@ class ConversationMemory:
     def _trim(self) -> None:
         # Trim by turn count first (a "turn" = one user + one assistant msg)
         if self.max_turns and len(self.entries) > self.max_turns * 2:
-            self.entries = self.entries[-self.max_turns * 2:]
+            self.entries = self.entries[-self.max_turns * 2 :]
 
         # Then trim by total character budget, dropping oldest first,
         # so a handful of very long messages can't blow the prompt

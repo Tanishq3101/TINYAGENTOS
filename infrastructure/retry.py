@@ -26,7 +26,7 @@ class RetryPolicy:
     def calculate_delay(self, attempt: int) -> float:
         """Calculate exponential backoff delay for the given attempt
         number (0-indexed)."""
-        delay = self.base_delay * (self.exponential_base ** attempt)
+        delay = self.base_delay * (self.exponential_base**attempt)
         return min(delay, self.max_delay)
 
 
@@ -60,8 +60,7 @@ def retry_on_exception(
 
                     if is_last_attempt:
                         logger.error(
-                            f"{func.__name__} failed after "
-                            f"{policy.max_retries} attempts: {e}"
+                            f"{func.__name__} failed after " f"{policy.max_retries} attempts: {e}"
                         )
                         break
 

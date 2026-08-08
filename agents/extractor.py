@@ -4,16 +4,17 @@ import re
 from agents.base import Agent, AgentConfig  # noqa: F401
 from infrastructure.logging import logger
 
-
 # Safe default returned when the model fails to produce valid JSON,
 # so downstream consumers (e.g. CriticAgent, orchestrator) never have
 # to handle a malformed/missing extraction as a special case.
-DEFAULT_EXTRACTION = json.dumps({
-    "key_points": [],
-    "entities": {"person": [], "organization": [], "location": []},
-    "sentiment": "neutral",
-    "topics": [],
-})
+DEFAULT_EXTRACTION = json.dumps(
+    {
+        "key_points": [],
+        "entities": {"person": [], "organization": [], "location": []},
+        "sentiment": "neutral",
+        "topics": [],
+    }
+)
 
 
 class ExtractorAgent(Agent):

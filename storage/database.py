@@ -26,9 +26,7 @@ class Database:
             database_url,
             connect_args={"check_same_thread": False} if "sqlite" in database_url else {},
         )
-        self.SessionLocal = sessionmaker(
-            autocommit=False, autoflush=False, bind=self.engine
-        )
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
 
     def init_db(self) -> None:
         """Create all tables. Safe to call repeatedly — no-op if they exist."""

@@ -19,7 +19,9 @@ class CriticAgent(Agent):
         )
     """
 
-    def build_prompt(self, input_data: str, summary: str = "", extraction: str = "", **kwargs) -> str:
+    def build_prompt(
+        self, input_data: str, summary: str = "", extraction: str = "", **kwargs
+    ) -> str:
         original = input_data[:1500]
         summary = (summary or "")[:1000]
         extraction = (extraction or "")[:1000]
@@ -45,7 +47,9 @@ Recommendations: <comma-separated list>
 
 Be objective and specific."""
 
-    def _execute_task(self, input_data: str, summary: str = "", extraction: str = "", **kwargs) -> dict:
+    def _execute_task(
+        self, input_data: str, summary: str = "", extraction: str = "", **kwargs
+    ) -> dict:
         if not summary or not extraction:
             raise ValueError(
                 "CriticAgent requires both 'summary' and 'extraction' "

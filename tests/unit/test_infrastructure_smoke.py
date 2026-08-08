@@ -4,13 +4,15 @@ import time
 
 import pytest
 
-
 # --- security.py -----------------------------------------------------------
+
 
 def test_security_manager_requires_explicit_key():
     from infrastructure.security import SecurityManager
 
-    print("\n[test_security_manager_requires_explicit_key] constructing SecurityManager with empty key...")
+    print(
+        "\n[test_security_manager_requires_explicit_key] constructing SecurityManager with empty key..."
+    )
     with pytest.raises(ValueError) as exc_info:
         SecurityManager(encryption_key="")
     print(f"[test_security_manager_requires_explicit_key] raised ValueError: {exc_info.value}")
@@ -98,10 +100,13 @@ def test_request_signature_roundtrip():
 
 # --- validators.py -----------------------------------------------------------
 
+
 def test_task_input_sanitizes_whitespace_and_nulls():
     from infrastructure.validators import TaskInput
 
-    print("\n[test_task_input_sanitizes_whitespace_and_nulls] constructing TaskInput with nulls/whitespace...")
+    print(
+        "\n[test_task_input_sanitizes_whitespace_and_nulls] constructing TaskInput with nulls/whitespace..."
+    )
     task = TaskInput(text="hello \x00  world\n\n  again")
     print(f"[test_task_input_sanitizes_whitespace_and_nulls] sanitized text={task.text!r}")
     assert task.text == "hello world again"
@@ -121,7 +126,9 @@ def test_task_input_rejects_empty_text():
 def test_task_input_rejects_invalid_task_type():
     from infrastructure.validators import TaskInput
 
-    print("\n[test_task_input_rejects_invalid_task_type] constructing TaskInput with task_type='not_a_real_type'...")
+    print(
+        "\n[test_task_input_rejects_invalid_task_type] constructing TaskInput with task_type='not_a_real_type'..."
+    )
     with pytest.raises(Exception) as exc_info:
         TaskInput(text="hello", task_type="not_a_real_type")
     print(f"[test_task_input_rejects_invalid_task_type] raised: {exc_info.value}")
@@ -143,11 +150,15 @@ def test_pagination_defaults_and_bounds():
 
     print("\n[test_pagination_defaults_and_bounds] constructing PaginationParams with defaults...")
     default = PaginationParams()
-    print(f"[test_pagination_defaults_and_bounds] default.page={default.page}, default.page_size={default.page_size}")
+    print(
+        f"[test_pagination_defaults_and_bounds] default.page={default.page}, default.page_size={default.page_size}"
+    )
     assert default.page == 1
     assert default.page_size == 20
 
-    print("[test_pagination_defaults_and_bounds] constructing PaginationParams with page_size=1000...")
+    print(
+        "[test_pagination_defaults_and_bounds] constructing PaginationParams with page_size=1000..."
+    )
     with pytest.raises(Exception) as exc_info:
         PaginationParams(page_size=1000)
     print(f"[test_pagination_defaults_and_bounds] raised: {exc_info.value}")
@@ -156,15 +167,20 @@ def test_pagination_defaults_and_bounds():
 
 # --- metrics.py -----------------------------------------------------------
 
+
 def test_metrics_collector_tracks_agent_execution():
     from infrastructure.metrics import MetricsCollector
 
-    print("\n[test_metrics_collector_tracks_agent_execution] starting agent metrics for 'summarizer'...")
+    print(
+        "\n[test_metrics_collector_tracks_agent_execution] starting agent metrics for 'summarizer'..."
+    )
     collector = MetricsCollector()
     m = collector.start_agent_metrics("summarizer")
     time.sleep(0.01)
     m.finalize()
-    print(f"[test_metrics_collector_tracks_agent_execution] execution_time_ms={m.execution_time_ms}")
+    print(
+        f"[test_metrics_collector_tracks_agent_execution] execution_time_ms={m.execution_time_ms}"
+    )
 
     assert m.execution_time_ms is not None
     assert m.execution_time_ms > 0
@@ -180,7 +196,9 @@ def test_metrics_collector_tracks_agent_execution():
 def test_metrics_collector_tracks_errors():
     from infrastructure.metrics import MetricsCollector
 
-    print("\n[test_metrics_collector_tracks_errors] starting agent metrics for 'extractor' with error...")
+    print(
+        "\n[test_metrics_collector_tracks_errors] starting agent metrics for 'extractor' with error..."
+    )
     collector = MetricsCollector()
     m = collector.start_agent_metrics("extractor")
     m.finalize(error="timeout")

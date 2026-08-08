@@ -5,7 +5,6 @@ from agents.base import AgentConfig
 from agents.summarizer import SummarizerAgent
 from agents.extractor import ExtractorAgent
 
-
 SAMPLE_TEXT = """
 Artificial intelligence is transforming how software is built. Small,
 efficient language models can now run directly on consumer laptops,

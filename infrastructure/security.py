@@ -37,11 +37,13 @@ class SecurityManager:
         if not encryption_key:
             raise ValueError(
                 "SecurityManager requires an explicit encryption_key. "
-                "Generate one with: python -c \"from cryptography.fernet import Fernet; "
-                "print(Fernet.generate_key().decode())\" and store it in your secrets "
+                'Generate one with: python -c "from cryptography.fernet import Fernet; '
+                'print(Fernet.generate_key().decode())" and store it in your secrets '
                 "manager / .env — never auto-generate one at runtime."
             )
-        self._cipher = Fernet(encryption_key.encode() if isinstance(encryption_key, str) else encryption_key)
+        self._cipher = Fernet(
+            encryption_key.encode() if isinstance(encryption_key, str) else encryption_key
+        )
 
     def encrypt_sensitive_data(self, data: str) -> str:
         """Encrypt a plaintext string for storage."""
@@ -77,9 +79,7 @@ class SecurityManager:
     @staticmethod
     def verify_request_signature(request_body: str, signature: str, secret: str) -> bool:
         """Verify an HMAC-SHA256 signature for request integrity (e.g. webhooks)."""
-        expected_sig = hmac.new(
-            secret.encode(), request_body.encode(), hashlib.sha256
-        ).hexdigest()
+        expected_sig = hmac.new(secret.encode(), request_body.encode(), hashlib.sha256).hexdigest()
         return hmac.compare_digest(signature, expected_sig)
 
 

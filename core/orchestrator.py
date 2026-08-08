@@ -115,10 +115,28 @@ __all__ = [
 # passed through as-is.
 _RESERVED_LOG_RECORD_ATTRS = frozenset(
     {
-        "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
-        "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
-        "created", "msecs", "relativeCreated", "thread", "threadName",
-        "process", "processName", "message", "asctime",
+        "name",
+        "msg",
+        "args",
+        "levelname",
+        "levelno",
+        "pathname",
+        "filename",
+        "module",
+        "exc_info",
+        "exc_text",
+        "stack_info",
+        "lineno",
+        "funcName",
+        "created",
+        "msecs",
+        "relativeCreated",
+        "thread",
+        "threadName",
+        "process",
+        "processName",
+        "message",
+        "asctime",
     }
 )
 
@@ -486,9 +504,7 @@ class Orchestrator:
                 task["completed_at"] = datetime.now()
                 task["updated_at"] = task["completed_at"]
 
-            self.logger.log_with_context(
-                "info", "Pipeline completed successfully", task_id=task_id
-            )
+            self.logger.log_with_context("info", "Pipeline completed successfully", task_id=task_id)
             return results
 
         except Exception as exc:
@@ -519,12 +535,8 @@ class Orchestrator:
         # Summarize and extract are independent of one another — run them
         # concurrently to cut wall-clock latency roughly in half versus
         # the original plan's strictly sequential execution.
-        summary_future = self._executor.submit(
-            self._run_agent_step, "summarizer", input_data
-        )
-        extraction_future = self._executor.submit(
-            self._run_agent_step, "extractor", input_data
-        )
+        summary_future = self._executor.submit(self._run_agent_step, "summarizer", input_data)
+        extraction_future = self._executor.submit(self._run_agent_step, "extractor", input_data)
 
         summary_outcome = self._resolve_future(summary_future, "summarizer")
         extraction_outcome = self._resolve_future(extraction_future, "extractor")
@@ -535,9 +547,7 @@ class Orchestrator:
             raise StepExecutionError("extractor", RuntimeError(extraction_outcome.error))
 
         summary_text: str = summary_outcome.output
-        extraction_dict: Dict[str, Any] = self._normalize_extraction(
-            extraction_outcome.output
-        )
+        extraction_dict: Dict[str, Any] = self._normalize_extraction(extraction_outcome.output)
 
         critic_outcome = self._run_agent_step(
             "critic",
@@ -572,7 +582,9 @@ class Orchestrator:
     def _run_agent_step(self, agent_name: str, input_data: str, **kwargs: Any) -> _StepOutcome:
         agent = self.agents.get(agent_name)
         if agent is None:
-            return _StepOutcome(agent_name, success=False, error=f"agent '{agent_name}' not configured")
+            return _StepOutcome(
+                agent_name, success=False, error=f"agent '{agent_name}' not configured"
+            )
 
         start = time.monotonic()
         try:

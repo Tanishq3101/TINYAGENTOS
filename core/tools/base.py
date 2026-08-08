@@ -33,7 +33,4 @@ class BaseTool(ABC):
         """
         Returns tool metadata
         """
-        return {
-            "name": self.name,
-            "description": self.description
-        }
+        return {"name": self.name, "description": self.description}

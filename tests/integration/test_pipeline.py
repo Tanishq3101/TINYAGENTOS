@@ -8,6 +8,7 @@ added on top of the original plan.
 
 Run with `-s` to see the print output: pytest -s tests/integration/test_pipeline.py
 """
+
 import json
 import threading
 import time
@@ -26,18 +27,19 @@ from core.orchestrator import (
     TaskNotFoundError,
 )
 
-
 # A JSON string matching ExtractorAgent's expected schema. LLMRuntime.generate()
 # returns a plain str for every agent (summarizer/extractor/critic all share the
 # same mocked llm), so this one string has to double as: extractable JSON for
 # the extractor, and "just some text" for summarizer/critic, which only care
 # that it's a non-empty string.
-VALID_EXTRACTION_JSON = json.dumps({
-    "key_points": ["point1", "point2"],
-    "entities": {"person": ["Alice"], "organization": ["Acme"], "location": []},
-    "sentiment": "positive",
-    "topics": ["testing"],
-})
+VALID_EXTRACTION_JSON = json.dumps(
+    {
+        "key_points": ["point1", "point2"],
+        "entities": {"person": ["Alice"], "organization": ["Acme"], "location": []},
+        "sentiment": "positive",
+        "topics": ["testing"],
+    }
+)
 
 
 def make_agents(llm):
@@ -132,7 +134,9 @@ class TestPipelineIntegration:
         print("[test_oversized_input_rejected] PASSED")
 
     def test_unknown_task_type_rejected(self, orchestrator):
-        print("\n[test_unknown_task_type_rejected] creating task with task_type='not_a_real_type'...")
+        print(
+            "\n[test_unknown_task_type_rejected] creating task with task_type='not_a_real_type'..."
+        )
         with pytest.raises(InvalidTaskInputError) as exc_info:
             orchestrator.create_task("Test input", task_type="not_a_real_type")
         print(f"[test_unknown_task_type_rejected] raised InvalidTaskInputError: {exc_info.value}")
@@ -167,15 +171,21 @@ class TestPipelineIntegration:
         with pytest.raises(Exception) as exc_info:
             orch.execute_pipeline(task_id)
         print(f"[test_agent_failure_marks_task_failed] raised: {exc_info.value}")
-        print(f"[test_agent_failure_marks_task_failed] task status: {orch.tasks[task_id]['status'].value}")
-        print(f"[test_agent_failure_marks_task_failed] task errors: {orch.tasks[task_id]['errors']}")
+        print(
+            f"[test_agent_failure_marks_task_failed] task status: {orch.tasks[task_id]['status'].value}"
+        )
+        print(
+            f"[test_agent_failure_marks_task_failed] task errors: {orch.tasks[task_id]['errors']}"
+        )
         assert orch.tasks[task_id]["status"].value == "failed"
         assert orch.tasks[task_id]["errors"]
         orch.shutdown()
         print("[test_agent_failure_marks_task_failed] PASSED")
 
     def test_concurrent_execution_of_same_task_is_blocked(self):
-        print("\n[test_concurrent_execution_of_same_task_is_blocked] starting slow pipeline on a background thread...")
+        print(
+            "\n[test_concurrent_execution_of_same_task_is_blocked] starting slow pipeline on a background thread..."
+        )
         llm = Mock()
 
         def slow_inference(*args, **kwargs):
@@ -192,19 +202,27 @@ class TestPipelineIntegration:
             try:
                 orch.execute_pipeline(task_id)
                 outcomes["first"] = "ok"
-                print("[test_concurrent_execution_of_same_task_is_blocked] background thread: execution completed OK")
+                print(
+                    "[test_concurrent_execution_of_same_task_is_blocked] background thread: execution completed OK"
+                )
             except Exception as exc:  # noqa: BLE001
                 outcomes["first_error"] = str(exc)
-                print(f"[test_concurrent_execution_of_same_task_is_blocked] background thread errored: {exc}")
+                print(
+                    f"[test_concurrent_execution_of_same_task_is_blocked] background thread errored: {exc}"
+                )
 
         t = threading.Thread(target=run)
         t.start()
         time.sleep(0.05)
 
-        print("[test_concurrent_execution_of_same_task_is_blocked] main thread: attempting duplicate execute_pipeline() call...")
+        print(
+            "[test_concurrent_execution_of_same_task_is_blocked] main thread: attempting duplicate execute_pipeline() call..."
+        )
         with pytest.raises(TaskAlreadyRunningError) as exc_info:
             orch.execute_pipeline(task_id)
-        print(f"[test_concurrent_execution_of_same_task_is_blocked] main thread raised TaskAlreadyRunningError: {exc_info.value}")
+        print(
+            f"[test_concurrent_execution_of_same_task_is_blocked] main thread raised TaskAlreadyRunningError: {exc_info.value}"
+        )
 
         t.join()
         print(f"[test_concurrent_execution_of_same_task_is_blocked] outcomes={outcomes}")
@@ -213,15 +231,21 @@ class TestPipelineIntegration:
         print("[test_concurrent_execution_of_same_task_is_blocked] PASSED")
 
     def test_task_not_found_for_missing_agent_at_creation(self, mock_llm):
-        print("\n[test_task_not_found_for_missing_agent_at_creation] orchestrator configured with only 'summarizer'...")
+        print(
+            "\n[test_task_not_found_for_missing_agent_at_creation] orchestrator configured with only 'summarizer'..."
+        )
         # Requesting full_pipeline without a configured critic should fail
         # fast at create_task(), not mid-pipeline.
         orch = Orchestrator({"summarizer": make_agents(mock_llm)["summarizer"]})
         with pytest.raises(InvalidTaskInputError) as exc_info:
             orch.create_task("Test input", task_type="full_pipeline")
-        print(f"[test_task_not_found_for_missing_agent_at_creation] raised InvalidTaskInputError: {exc_info.value}")
+        print(
+            f"[test_task_not_found_for_missing_agent_at_creation] raised InvalidTaskInputError: {exc_info.value}"
+        )
         orch.shutdown()
-        print("[test_task_not_found_for_missing_agent_at_creation] PASSED - failed fast at creation, not mid-pipeline")
+        print(
+            "[test_task_not_found_for_missing_agent_at_creation] PASSED - failed fast at creation, not mid-pipeline"
+        )
 
 
 if __name__ == "__main__":

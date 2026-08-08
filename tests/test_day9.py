@@ -7,7 +7,6 @@ from agents.extractor import ExtractorAgent
 from agents.critic import CriticAgent
 from infrastructure.retry import RetryPolicy, retry_on_exception
 
-
 SAMPLE_TEXT = """
 Artificial intelligence is transforming how software is built. Small,
 efficient language models can now run directly on consumer laptops,
@@ -55,7 +54,9 @@ def test_critic_agent_full_pipeline():
     assert "score" in output
 
     print(f"✅ Critic score: {output['score']}")
-    print(f"✅ Critic feedback: {output['feedback'][:80] if output['feedback'] else '(none parsed)'}")
+    print(
+        f"✅ Critic feedback: {output['feedback'][:80] if output['feedback'] else '(none parsed)'}"
+    )
 
 
 def test_critic_agent_missing_inputs():

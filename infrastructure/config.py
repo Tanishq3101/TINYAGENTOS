@@ -86,7 +86,7 @@ class Settings(BaseSettings):
         if len(v) < 32:
             raise ValueError(
                 "SECRET_KEY must be at least 32 characters. Generate one with: "
-                "python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+                'python -c "import secrets; print(secrets.token_urlsafe(64))"'
             )
         if v.strip().lower() in {"change_this_in_production", "changeme", "secret"}:
             raise ValueError("SECRET_KEY is still a placeholder value — set a real one in .env")
@@ -104,6 +104,7 @@ class Settings(BaseSettings):
         Pydantic config:
         - Loads environment variables from `.env`
         """
+
         env_file = ".env"
         case_sensitive = True
         extra = "ignore"

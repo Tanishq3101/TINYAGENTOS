@@ -64,10 +64,7 @@ class BaseAgent:
     # ========================================
     def _format_tools(self) -> str:
         """Format available tools for decision prompt"""
-        return "\n".join(
-            f"- {name}: {meta['description']}"
-            for name, meta in TOOLS.items()
-        )
+        return "\n".join(f"- {name}: {meta['description']}" for name, meta in TOOLS.items())
 
     # ========================================
     # 🧠 EXTRACT JSON (ROBUST)
@@ -88,7 +85,7 @@ class BaseAgent:
         last = text.rfind("}")
 
         if first != -1 and last != -1 and first < last:
-            json_str = text[first:last + 1]
+            json_str = text[first : last + 1]
             try:
                 parsed = json.loads(json_str)
                 if isinstance(parsed, dict):
@@ -121,7 +118,7 @@ class BaseAgent:
             salvaged = {
                 "action": action.group(1),
                 "tool_name": tool.group(1) if tool else None,
-                "tool_input": inp.group(1) if inp else ""
+                "tool_input": inp.group(1) if inp else "",
             }
             logger.info(f"Salvaged JSON: {salvaged}")
             return salvaged
@@ -180,8 +177,19 @@ class BaseAgent:
 
         if tool_name == "weather":
             stopwords = {
-                "what", "is", "the", "weather", "in", "today", "now",
-                "tell", "me", "can", "you", "please", "like",
+                "what",
+                "is",
+                "the",
+                "weather",
+                "in",
+                "today",
+                "now",
+                "tell",
+                "me",
+                "can",
+                "you",
+                "please",
+                "like",
             }
             words = tool_input.lower().split()
             filtered = [w for w in words if w not in stopwords]

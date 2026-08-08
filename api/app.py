@@ -113,9 +113,12 @@ app.add_middleware(LoggingMiddleware)
 # Translate the orchestrator's domain exceptions into proper HTTP status
 # codes instead of letting them fall through to a generic 500.
 
+
 @app.exception_handler(InvalidTaskInputError)
 async def handle_invalid_input(request: Request, exc: InvalidTaskInputError):
-    return JSONResponse(status_code=422, content={"error": "invalid_task_input", "detail": str(exc)})
+    return JSONResponse(
+        status_code=422, content={"error": "invalid_task_input", "detail": str(exc)}
+    )
 
 
 @app.exception_handler(TaskNotFoundError)
@@ -125,7 +128,9 @@ async def handle_task_not_found(request: Request, exc: TaskNotFoundError):
 
 @app.exception_handler(TaskAlreadyRunningError)
 async def handle_task_already_running(request: Request, exc: TaskAlreadyRunningError):
-    return JSONResponse(status_code=409, content={"error": "task_already_running", "detail": str(exc)})
+    return JSONResponse(
+        status_code=409, content={"error": "task_already_running", "detail": str(exc)}
+    )
 
 
 @app.exception_handler(KeyError)

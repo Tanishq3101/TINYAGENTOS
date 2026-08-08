@@ -123,8 +123,19 @@ def test_execute_single_step_success() -> None:
 def test_execute_chains_output_to_next_steps_input() -> None:
     pipeline = (
         Pipeline("p1")
-        .add_step(PipelineStep(name="step1", agent=lambda x: x + 1, input_key="n", output_key="after_step1"))
-        .add_step(PipelineStep(name="step2", agent=lambda x: x * 2, input_key="after_step1", output_key="after_step2"))
+        .add_step(
+            PipelineStep(
+                name="step1", agent=lambda x: x + 1, input_key="n", output_key="after_step1"
+            )
+        )
+        .add_step(
+            PipelineStep(
+                name="step2",
+                agent=lambda x: x * 2,
+                input_key="after_step1",
+                output_key="after_step2",
+            )
+        )
     )
     result = pipeline.execute({"n": 5})
     assert result["after_step1"] == 6
@@ -137,15 +148,21 @@ def test_execute_extra_input_keys_forwarded_as_kwargs() -> None:
 
     pipeline = (
         Pipeline("p1")
-        .add_step(PipelineStep(name="seed_bonus", agent=lambda x: "B", input_key="n", output_key="bonus"))
-        .add_step(PipelineStep(name="seed_tag", agent=lambda x: "T", input_key="n", output_key="tag"))
-        .add_step(PipelineStep(
-            name="combine",
-            agent=combine,
-            input_key="n",
-            output_key="result",
-            extra_input_keys=["bonus", "tag"],
-        ))
+        .add_step(
+            PipelineStep(name="seed_bonus", agent=lambda x: "B", input_key="n", output_key="bonus")
+        )
+        .add_step(
+            PipelineStep(name="seed_tag", agent=lambda x: "T", input_key="n", output_key="tag")
+        )
+        .add_step(
+            PipelineStep(
+                name="combine",
+                agent=combine,
+                input_key="n",
+                output_key="result",
+                extra_input_keys=["bonus", "tag"],
+            )
+        )
     )
     result = pipeline.execute({"n": "base"})
     assert result["result"] == "base-B-T"
@@ -185,15 +202,19 @@ def test_execute_missing_required_input_raises_even_with_stop_on_error_false() -
 def test_execute_missing_required_input_on_optional_step_is_skipped_not_raised() -> None:
     pipeline = (
         Pipeline("p1")
-        .add_step(PipelineStep(
-            name="needs_x",
-            agent=lambda n: "should not run",
-            input_key="n",
-            output_key="out",
-            required_inputs=["missing_key"],
-            optional=True,
-        ))
-        .add_step(PipelineStep(name="after", agent=lambda n: n + 1, input_key="n", output_key="after"))
+        .add_step(
+            PipelineStep(
+                name="needs_x",
+                agent=lambda n: "should not run",
+                input_key="n",
+                output_key="out",
+                required_inputs=["missing_key"],
+                optional=True,
+            )
+        )
+        .add_step(
+            PipelineStep(name="after", agent=lambda n: n + 1, input_key="n", output_key="after")
+        )
     )
     result = pipeline.execute({"n": 1})
 
@@ -271,8 +292,14 @@ def test_execute_optional_step_exception_is_swallowed_and_pipeline_continues() -
 
     pipeline = (
         Pipeline("p1")
-        .add_step(PipelineStep(name="boom_step", agent=boom, input_key="n", output_key="out", optional=True))
-        .add_step(PipelineStep(name="after", agent=lambda n: n + 1, input_key="n", output_key="after"))
+        .add_step(
+            PipelineStep(
+                name="boom_step", agent=boom, input_key="n", output_key="out", optional=True
+            )
+        )
+        .add_step(
+            PipelineStep(name="after", agent=lambda n: n + 1, input_key="n", output_key="after")
+        )
     )
     result = pipeline.execute({"n": 1})
 

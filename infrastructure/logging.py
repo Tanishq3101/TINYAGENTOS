@@ -76,9 +76,7 @@ def setup_logger() -> logging.Logger:
 
     os.makedirs("logs", exist_ok=True)
 
-    formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 
     # Console handler (UTF-8 compatible)
     console_handler = UTF8StreamHandler(sys.stdout)

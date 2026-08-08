@@ -84,7 +84,6 @@ from core.orchestrator import (
 from core.pipeline import MissingInputError, Pipeline, PipelineStep, StepExecutionError
 from infrastructure.retry import RetryPolicy, retry_on_exception
 
-
 SAMPLE_TEXT = """
 Artificial intelligence is transforming how software is built. Small,
 efficient language models can now run directly on consumer laptops,
@@ -156,11 +155,13 @@ def test_create_and_get_task():
 
 
 def test_get_unknown_task_raises():
-    orch = Orchestrator({
-        "summarizer": MockAgent(output="x"),
-        "extractor": MockAgent(output="x"),
-        "critic": MockAgent(output="x"),
-    })
+    orch = Orchestrator(
+        {
+            "summarizer": MockAgent(output="x"),
+            "extractor": MockAgent(output="x"),
+            "critic": MockAgent(output="x"),
+        }
+    )
 
     # get_task() is a "safe" accessor -- returns None, does not raise.
     assert orch.get_task("does-not-exist") is None
@@ -316,20 +317,26 @@ def test_generic_pipeline_chaining():
 
     pipeline = (
         Pipeline("test_pipeline")
-        .add_step(PipelineStep(
-            name="summarize", agent=summarize_step, input_key="input", output_key="summary"
-        ))
-        .add_step(PipelineStep(
-            name="extract", agent=extract_step, input_key="input", output_key="extraction"
-        ))
-        .add_step(PipelineStep(
-            name="critique",
-            agent=critic_step,
-            input_key="input",
-            output_key="evaluation",
-            required_inputs=["summary", "extraction"],
-            extra_input_keys=["summary", "extraction"],
-        ))
+        .add_step(
+            PipelineStep(
+                name="summarize", agent=summarize_step, input_key="input", output_key="summary"
+            )
+        )
+        .add_step(
+            PipelineStep(
+                name="extract", agent=extract_step, input_key="input", output_key="extraction"
+            )
+        )
+        .add_step(
+            PipelineStep(
+                name="critique",
+                agent=critic_step,
+                input_key="input",
+                output_key="evaluation",
+                required_inputs=["summary", "extraction"],
+                extra_input_keys=["summary", "extraction"],
+            )
+        )
     )
 
     result = pipeline.execute({"input": SAMPLE_TEXT})
@@ -413,9 +420,7 @@ def test_pipeline_step_retries_when_agent_wrapped_with_retry_on_exception():
             raise ValueError("transient")
         return "eventually worked"
 
-    wrapped = retry_on_exception(
-        RetryPolicy(max_retries=3, base_delay=0.01), (ValueError,)
-    )(flaky)
+    wrapped = retry_on_exception(RetryPolicy(max_retries=3, base_delay=0.01), (ValueError,))(flaky)
 
     pipeline = Pipeline("retry_pipeline").add_step(
         PipelineStep(name="flaky", agent=wrapped, input_key="input", output_key="result")
@@ -425,7 +430,9 @@ def test_pipeline_step_retries_when_agent_wrapped_with_retry_on_exception():
     assert result["result"] == "eventually worked"
     assert call_count["n"] == 3
 
-    print("✅ retry-on-transient-failure works when the agent is pre-wrapped with retry_on_exception")
+    print(
+        "✅ retry-on-transient-failure works when the agent is pre-wrapped with retry_on_exception"
+    )
 
 
 # ============================================================
@@ -450,9 +457,7 @@ def test_real_orchestrator_end_to_end():
         "extractor": ExtractorAgent(
             AgentConfig(name="extractor", description="", max_tokens=384), llm
         ),
-        "critic": CriticAgent(
-            AgentConfig(name="critic", description="", max_tokens=400), llm
-        ),
+        "critic": CriticAgent(AgentConfig(name="critic", description="", max_tokens=400), llm),
     }
 
     orch = Orchestrator(agents)

@@ -10,6 +10,7 @@ from infrastructure.logging import logger
 
 class AgentConfig(BaseModel):
     """Configuration for agents"""
+
     name: str
     description: str
     max_tokens: int = 512
@@ -27,6 +28,7 @@ class AgentMetrics:
     in this project hasn't been confirmed. Swap this out if/when a
     shared metrics module exists.
     """
+
     agent_name: str
     start_time: datetime
     end_time: Optional[datetime] = None
@@ -35,9 +37,7 @@ class AgentMetrics:
 
     def finalize(self) -> None:
         self.end_time = datetime.now()
-        self.execution_time_ms = (
-            self.end_time - self.start_time
-        ).total_seconds() * 1000
+        self.execution_time_ms = (self.end_time - self.start_time).total_seconds() * 1000
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -79,10 +79,7 @@ class Agent(ABC):
             }
 
         try:
-            logger.info(
-                f"Agent {self.config.name} started | "
-                f"input_length={len(input_data)}"
-            )
+            logger.info(f"Agent {self.config.name} started | " f"input_length={len(input_data)}")
 
             result = self._execute_task(input_data, **kwargs)
 

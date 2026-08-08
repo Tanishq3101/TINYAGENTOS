@@ -92,9 +92,7 @@ class LLMRuntime:
             # Without this, the model doesn't know where the user's
             # turn ends and its own turn begins, so it "free
             # associates" fake <|assistant|> / USER / OUTPUT blocks.
-            formatted_prompt = (
-                f"<|user|>\n{prompt.strip()}<|end|>\n<|assistant|>\n"
-            )
+            formatted_prompt = f"<|user|>\n{prompt.strip()}<|end|>\n<|assistant|>\n"
 
             # PATCHED: serialize the actual native inference call. This is
             # the one call in this method that touches the shared

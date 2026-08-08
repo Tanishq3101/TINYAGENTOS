@@ -8,17 +8,25 @@ import pytest
 def test_setup_logger_returns_same_instance_and_no_duplicate_handlers():
     from infrastructure.logging import setup_logger
 
-    print("\n[test_setup_logger_returns_same_instance_and_no_duplicate_handlers] calling setup_logger() twice...")
+    print(
+        "\n[test_setup_logger_returns_same_instance_and_no_duplicate_handlers] calling setup_logger() twice..."
+    )
     logger_a = setup_logger()
     handler_count_after_first = len(logger_a.handlers)
     logger_b = setup_logger()
     handler_count_after_second = len(logger_b.handlers)
 
-    print(f"[test_setup_logger_returns_same_instance_and_no_duplicate_handlers] logger_a is logger_b: {logger_a is logger_b}")
-    print(f"[test_setup_logger_returns_same_instance_and_no_duplicate_handlers] handlers after 1st call: {handler_count_after_first}, after 2nd call: {handler_count_after_second}")
+    print(
+        f"[test_setup_logger_returns_same_instance_and_no_duplicate_handlers] logger_a is logger_b: {logger_a is logger_b}"
+    )
+    print(
+        f"[test_setup_logger_returns_same_instance_and_no_duplicate_handlers] handlers after 1st call: {handler_count_after_first}, after 2nd call: {handler_count_after_second}"
+    )
 
     assert logger_a is logger_b  # module-level singleton
-    assert handler_count_after_first == handler_count_after_second  # guard prevents duplicate handlers
+    assert (
+        handler_count_after_first == handler_count_after_second
+    )  # guard prevents duplicate handlers
     print("[test_setup_logger_returns_same_instance_and_no_duplicate_handlers] PASSED")
 
 
@@ -87,7 +95,9 @@ def test_settings_accepts_strong_secret_key(monkeypatch):
     strong_secret = "x" * 64
     monkeypatch.setenv("SECRET_KEY", strong_secret)
     settings = Settings(_env_file=None)
-    print(f"[test_settings_accepts_strong_secret_key] settings.SECRET_KEY matches input: {settings.SECRET_KEY == strong_secret}")
+    print(
+        f"[test_settings_accepts_strong_secret_key] settings.SECRET_KEY matches input: {settings.SECRET_KEY == strong_secret}"
+    )
     print(f"[test_settings_accepts_strong_secret_key] settings.PORT={settings.PORT}")
     assert settings.SECRET_KEY == strong_secret
     assert settings.PORT == 8000  # default applied

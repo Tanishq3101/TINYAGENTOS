@@ -30,6 +30,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # Password Handling
 # -------------------------
 
+
 def hash_password(password: str) -> str:
     """
     Hash a plain-text password.
@@ -55,6 +56,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 # -------------------------
 # JWT Token Handling
 # -------------------------
+
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     """

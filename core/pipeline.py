@@ -82,9 +82,7 @@ class StepTimeoutError(PipelineError, TimeoutError):
     def __init__(self, step_name: str, timeout_seconds: float):
         self.step_name = step_name
         self.timeout_seconds = timeout_seconds
-        super().__init__(
-            f"Step '{step_name}' exceeded timeout of {timeout_seconds}s"
-        )
+        super().__init__(f"Step '{step_name}' exceeded timeout of {timeout_seconds}s")
 
 
 @dataclass
@@ -135,9 +133,7 @@ class PipelineStep:
         if not callable(self.agent):
             raise ValueError(f"PipelineStep '{self.name}'.agent must be callable")
         if not self.input_key or not self.output_key:
-            raise ValueError(
-                f"PipelineStep '{self.name}' requires both input_key and output_key"
-            )
+            raise ValueError(f"PipelineStep '{self.name}' requires both input_key and output_key")
 
 
 class Pipeline:
@@ -233,9 +229,7 @@ class Pipeline:
                 raise err
 
             step_input = working_context.get(step.input_key)
-            extra_kwargs = {
-                key: working_context.get(key) for key in step.extra_input_keys
-            }
+            extra_kwargs = {key: working_context.get(key) for key in step.extra_input_keys}
 
             entry["status"] = StepStatus.RUNNING.value
             start = time.monotonic()
@@ -249,9 +243,7 @@ class Pipeline:
                 self.execution_history.append(
                     {**entry, "duration_ms": (time.monotonic() - start) * 1000}
                 )
-                logger.warning(
-                    "Pipeline '%s' step '%s' failed: %s", self.name, step.name, exc
-                )
+                logger.warning("Pipeline '%s' step '%s' failed: %s", self.name, step.name, exc)
                 if step.optional and not stop_on_error:
                     continue
                 if step.optional:
