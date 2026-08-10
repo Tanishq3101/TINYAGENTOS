@@ -1,6 +1,26 @@
 """
 API routes for TinyAgentOS.
 
+PATCHED: wrapped the three blocking orchestrator calls
+(create_task / execute_pipeline / get_task) with
+fastapi.concurrency.run_in_threadpool.
+
+Root cause of the integration-test timeouts: every route here is
+`async def`, but orchestrator.create_task(...) / execute_pipeline(...) /
+get_task(...) are plain synchronous calls -- execute_pipeline in
+particular runs real LLM inference (now further serialized by
+llm_runtime.py's _inference_lock). A synchronous, multi-second call
+inside an `async def` blocks FastAPI's single event loop for its full
+duration -- no other request, including /health, can be served until it
+returns. That's why even the trivial health check was timing out
+whenever a full_pipeline execution was in flight.
+
+run_in_threadpool offloads each blocking call to a worker thread and
+awaits the result, freeing the event loop to keep serving other requests
+concurrently. This does NOT change any response shape, status code, or
+error-handling logic below -- only where the orchestrator call actually
+runs.
+
 Implements:
 - Task creation and execution
 - Task status queries
@@ -8,58 +28,25 @@ Implements:
 - Authentication and validation
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Header, status
-from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 from datetime import datetime
 
+from api.dependencies import verify_api_key, get_orchestrator
 from api.schemas import TaskRequest, TaskResponse, ExecutionResult
 from core.orchestrator import Orchestrator
 from infrastructure.logging import logger
-from infrastructure.config import get_settings
 
 # ========================================
 # Dependency Functions
 # ========================================
-
-
-def verify_api_key(x_api_key: Optional[str] = Header(None)) -> str:
-    """
-    Verify API key from request headers.
-
-    Raises:
-        HTTPException: 401 if key is missing or invalid
-    """
-    settings = get_settings()
-
-    if not settings.REQUIRE_AUTH:
-        return "no-auth"
-
-    # Check if header is present
-    if not x_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing X-API-Key header",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    # Validate format
-    if not x_api_key.startswith("sk-"):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key format",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    return x_api_key
-
-
-def get_orchestrator() -> Orchestrator:
-    """Get orchestrator instance."""
-    # In production, this would be dependency injection
-    from core.orchestrator import orchestrator
-
-    return orchestrator
-
+#
+# verify_api_key() and get_orchestrator() now live in api/dependencies.py
+# as the single implementation -- this file previously carried its own
+# near-identical copy of verify_api_key() (the one actually wired via
+# Depends() below), while api/dependencies.py's copy sat unused. See
+# docs/SECURITY.md's "API Key Authentication" section for why that
+# duplication existed and docs/API.md for the current auth behavior.
 
 # ========================================
 # Router Setup
@@ -111,8 +98,14 @@ async def create_task(
     logger.info(f"Creating task with text length: {len(request.text)}")
 
     try:
-        task_id = orchestrator.create_task(
-            text=request.text,
+        # PATCHED: offloaded to a worker thread so this doesn't block the
+        # event loop. create_task() itself is normally fast (validation +
+        # dict bookkeeping, no LLM call), but it's still a synchronous
+        # call and can briefly hold Orchestrator's internal lock while
+        # another task's cleanup runs -- cheap insurance either way.
+        task_id = await run_in_threadpool(
+            orchestrator.create_task,
+            input_data=request.text,
             task_type=request.task_type,
             priority=request.priority,
         )
@@ -154,7 +147,12 @@ async def execute_task(
     logger.info(f"Executing task: {task_id}")
 
     try:
-        result = orchestrator.execute_pipeline(task_id)
+        # PATCHED: this is the important one. execute_pipeline() runs real
+        # LLM inference (seconds to tens of seconds) -- without
+        # run_in_threadpool this held the event loop hostage for the
+        # entire pipeline run, which is why /health and every other
+        # concurrent request timed out during test_full_pipeline_*.
+        result = await run_in_threadpool(orchestrator.execute_pipeline, task_id)
 
         return {
             "status": "success",
@@ -212,7 +210,11 @@ async def get_task_status(
     logger.info(f"Getting task status: {task_id}")
 
     try:
-        task = orchestrator.get_task(task_id)
+        # PATCHED: same reasoning as create_task -- cheap call normally,
+        # but offloaded for consistency and to avoid holding the event
+        # loop if Orchestrator's internal lock is briefly contended by a
+        # concurrent execute_pipeline() call.
+        task = await run_in_threadpool(orchestrator.get_task, task_id)
 
         if not task:
             raise HTTPException(

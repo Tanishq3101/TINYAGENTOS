@@ -1,0 +1,3 @@
+python -m scripts.run_benchmarks
+python -m scripts.benchmark_inference --calls 30
+docker compose -f docker/docker-compose.yml --env-file .env up --build

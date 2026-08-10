@@ -33,6 +33,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-v --cov=. --cov-report=term-missing"
 asyncio_mode = "auto"
+pythonpath = ["."]
 
 [tool.bandit]
 exclude_dirs = ["tests", "venv", ".venv"]

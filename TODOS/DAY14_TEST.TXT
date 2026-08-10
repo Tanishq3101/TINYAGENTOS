@@ -1,0 +1,107 @@
+Here's every curl test we've actually run today, in order, with the exact expected output for each — so you can rerun the full set after any future change and know immediately if something regressed.
+
+**Prerequisite — confirm container is healthy before testing anything:**
+```bash
+docker inspect --format="{{.State.Health.Status}}" docker-tinyagentos-1
+```
+Expected: `healthy`
+
+---
+
+**1. Health check — correct path**
+```bash
+curl http://localhost:8000/api/v1/health
+```
+Expected (200 OK):
+```json
+{"status":"healthy","timestamp":"2026-08-...T..."}
+```
+
+**2. Health check — wrong path (should fail, confirms router prefix)**
+```bash
+curl -i http://localhost:8000/health
+```
+Expected: `HTTP/1.1 404 Not Found` — if this ever returns 200 instead, the router prefix changed and every other path-dependent config needs updating.
+
+---
+
+**3. Missing API key (should be rejected)**
+```bash
+curl -i -X POST http://localhost:8000/api/v1/tasks -H "Content-Type: application/json" -d "{\"text\": \"test\", \"task_type\": \"summarize\", \"priority\": 1}"
+```
+Expected: `HTTP/1.1 401 Unauthorized`
+```json
+{"detail":"Missing X-API-Key header"}
+```
+
+**4. Malformed API key (should be rejected)**
+```bash
+curl -i -X POST http://localhost:8000/api/v1/tasks -H "X-API-Key: wrong-format" -H "Content-Type: application/json" -d "{\"text\": \"test\", \"task_type\": \"summarize\", \"priority\": 1}"
+```
+Expected: `HTTP/1.1 401 Unauthorized`
+```json
+{"detail":"Invalid API key format"}
+```
+
+---
+
+**5. Create a summarize task**
+```bash
+curl -X POST http://localhost:8000/api/v1/tasks -H "X-API-Key: sk-test" -H "Content-Type: application/json" -d "{\"text\": \"The quick brown fox jumps over the lazy dog. This is a test sentence for the summarizer agent.\", \"task_type\": \"summarize\", \"priority\": 1}"
+```
+Expected (200 OK):
+```json
+{"task_id":"<some-uuid>","status":"created","message":"Task created successfully","created_at":null,"results":null,"errors":null}
+```
+**Copy the `task_id` from this response — you need it for the next command.**
+
+**6. Execute that task**
+```bash
+curl -X POST http://localhost:8000/api/v1/tasks/<task_id>/execute -H "X-API-Key: sk-test"
+```
+Expected (200 OK):
+```json
+{"status":"success","task_id":"<same-uuid>","result":{"summary":"<a real one-sentence summary text>"}}
+```
+This is the one that proved `SummarizerAgent → LLMRuntime.generate()` actually works — if this ever comes back as `{"detail":"Failed to create task"}` again, it means a parameter-name mismatch crept back in (check container logs for the exact `ERROR` line).
+
+---
+
+**7. Create a full_pipeline task**
+```bash
+curl -X POST http://localhost:8000/api/v1/tasks -H "X-API-Key: sk-test" -H "Content-Type: application/json" -d "{\"text\": \"The quick brown fox jumps over the lazy dog. This is a test sentence used to evaluate multiple AI agents working together.\", \"task_type\": \"full_pipeline\", \"priority\": 1}"
+```
+Expected: same shape as #5, new `task_id`.
+
+**8. Execute the full_pipeline task**
+```bash
+curl -X POST http://localhost:8000/api/v1/tasks/<task_id>/execute -H "X-API-Key: sk-test"
+```
+Expected (200 OK) — this is the important one, three-part shape:
+```json
+{
+  "status":"success",
+  "task_id":"<same-uuid>",
+  "result":{
+    "summary":"<text>",
+    "extraction":{"key_points":[...],"entities":{"person":[],"organization":[],"location":[]},"sentiment":"neutral","topics":[...]},
+    "evaluation":{"evaluation":"<full text>","score":<0-10>,"feedback":"<text>","strengths":[...],"weaknesses":[...],"recommendations":[...]}
+  }
+}
+```
+**What to specifically check here after the critic prompt fix:** look at `strengths`, `weaknesses`, `recommendations` — none of the list items should start with `"and "` or be a full run-on sentence. Clean short phrases = fix worked. Still seeing `"and sentiment is appropriately assessed as neutral."` as its own item = model ignored the tightened prompt, and we'd lean more on the regex cleanup, or iterate the prompt further.
+
+---
+
+**9. Invalid task_type (documents current behavior — currently 500, not ideal but that's what it does today)**
+```bash
+curl -i -X POST http://localhost:8000/api/v1/tasks -H "X-API-Key: sk-test" -H "Content-Type: application/json" -d "{\"text\": \"test\", \"task_type\": \"not_a_real_type\", \"priority\": 1}"
+```
+Expected: `HTTP/1.1 500 Internal Server Error`
+```json
+{"detail":"Failed to create task"}
+```
+
+---
+
+Run these top to bottom after any container rebuild. If you'd rather not retype all of this by hand each time, that's exactly what the `test_deployment_smoke.py` file automates — same checks, one `pytest` command instead of nine manual curls.

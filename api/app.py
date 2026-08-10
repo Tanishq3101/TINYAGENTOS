@@ -24,6 +24,15 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("TinyAgentOS starting up")
 
+    # Forces core.orchestrator's module-level import to run now, at boot,
+    # rather than lazily on the first request that calls get_orchestrator()
+    # in api/routes.py. This is what actually triggers LLMRuntime() and
+    # the ~26s GGUF model load -- doing it here means a broken MODEL_PATH
+    # or corrupted model file fails loudly during container startup
+    # (inside the HEALTHCHECK start-period window), instead of surfacing
+    # as an unexplained ~26s stall on someone's first real task request.
+    from core.orchestrator import orchestrator  # noqa: F401
+
     yield
 
     # Shutdown

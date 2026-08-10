@@ -1,0 +1,42 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Secrets -- never bake these into an image layer
+.env
+*.env
+!.env.example
+
+# Local data / logs / model weights (mounted as volumes instead, see
+# docker-compose.yml -- GGUF files are several GB, excluding them keeps
+# the build context small and the image build fast)
+logs/
+models/
+*.gguf
+*.db
+*.sqlite3
+
+# Editor/OS cruft
+.vscode/
+.idea/
+.DS_Store
+
+# Docs and non-runtime files
+docs/
+*.md
+tests/

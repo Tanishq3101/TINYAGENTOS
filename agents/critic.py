@@ -41,11 +41,13 @@ Provide a detailed evaluation in this exact format:
 
 Score: <a number from 0 to 10>
 Feedback: <one or two sentences of overall feedback>
-Strengths: <comma-separated list>
-Weaknesses: <comma-separated list>
-Recommendations: <comma-separated list>
+Strengths: <comma-separated short phrases only, no "and", no full sentences, e.g. "clear language, accurate entities, concise summary">
+Weaknesses: <comma-separated short phrases only, no "and", no full sentences>
+Recommendations: <comma-separated short phrases only, no "and", no full sentences>
 
-Be objective and specific."""
+Be objective and specific. Strengths, Weaknesses, and Recommendations must
+each be a flat comma-separated list of short phrases (2-5 words each) —
+not sentences, and do not join the last two items with "and"."""
 
     def _execute_task(
         self, input_data: str, summary: str = "", extraction: str = "", **kwargs
@@ -93,7 +95,18 @@ Be objective and specific."""
         def _split_list(raw: str) -> list:
             if not raw:
                 return []
-            return [item.strip() for item in raw.split(",") if item.strip()]
+            items = [item.strip() for item in raw.split(",") if item.strip()]
+            cleaned = []
+            for item in items:
+                # Model sometimes writes "..., and X." for the last item in
+                # a comma list despite being told not to -- strip that
+                # leading conjunction and any trailing sentence punctuation
+                # so it reads as a phrase, not a sentence fragment.
+                item = re.sub(r"^and\s+", "", item, flags=re.IGNORECASE)
+                item = item.rstrip(".").strip()
+                if item:
+                    cleaned.append(item)
+            return cleaned
 
         feedback = _find(r"feedback\s*:\s*(.+)")
         strengths = _split_list(_find(r"strengths\s*:\s*(.+)"))

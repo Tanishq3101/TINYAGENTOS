@@ -1,0 +1,49 @@
+# Adapted from the 30-day plan's draft compose file with two real-code fixes:
+#
+#   1. Environment variable names now match infrastructure/config.py's
+#      actual Settings fields (HOST, PORT, SECRET_KEY, LOG_LEVEL, DEBUG,
+#      REQUIRE_AUTH, DATABASE_URL) instead of the draft's JWT_SECRET /
+#      SERVER_HOST / SERVER_PORT, which don't exist as Settings fields --
+#      pydantic-settings silently ignores unrecognized env var names and
+#      falls back to field defaults, so those would have quietly done
+#      nothing rather than erroring.
+#   2. Removed the redis and prometheus services. Nothing in Settings,
+#      storage/, or infrastructure/ currently talks to either -- add them
+#      back (and wire real usage into storage/cache.py / metrics) when
+#      there's something that actually needs them.
+#
+# SECRET_KEY has no safe default in Settings (by design -- the app
+# refuses to start without one, see config.py's field_validator). Put a
+# real 32+ char value in a .env file at the project root; do not commit
+# it. Generate one with:
+#     python -c "import secrets; print(secrets.token_urlsafe(64))"
+#
+# Because this compose file lives in docker/ but the project's .env
+# lives at the project root, run it with an explicit --env-file from the
+# project root:
+#     docker compose -f docker/docker-compose.yml --env-file .env up --build
+
+services:
+  tinyagentos:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+      - REQUIRE_AUTH=true
+      - MODEL_PATH=/app/models/phi-3-mini.gguf
+      - DATABASE_URL=sqlite:///./tinyagentos.db
+      - SECRET_KEY=${SECRET_KEY}
+    volumes:
+      - ../logs:/app/logs
+      - ../models:/app/models
+    restart: unless-stopped
+    networks:
+      - tinyagentos-network
+
+networks:
+  tinyagentos-network:
+    driver: bridge

@@ -755,3 +755,78 @@ class Orchestrator:
         message = str(exc)
         # Defense in depth: truncate to avoid pathological log/response sizes.
         return message[:2000]
+
+
+# ---------------------------------------------------------------------------
+# Module-level singleton, imported by api/routes.py's get_orchestrator()
+# (or directly as `from core.orchestrator import orchestrator`).
+#
+# CHANGED (Day 18-19): this used to build eagerly at import time, meaning
+# ANY import from this module -- even `from core.orchestrator import
+# Orchestrator` to use just the class, with no intention of touching this
+# singleton -- forced the real GGUF model to load and required llama_cpp
+# + the full agents/ package to be importable. That broke
+# scripts/run_benchmarks.py, which imports Orchestrator specifically to
+# avoid real LLM calls (it uses FakeAgent), and would equally break any
+# test or tool that imports this module for the class/exceptions/
+# TaskStatus without wanting a multi-GB model loaded as a side effect.
+#
+# Fixed via PEP 562 module __getattr__: `orchestrator` is now built lazily
+# on first access instead of on import. The access pattern is UNCHANGED --
+# `from core.orchestrator import orchestrator` and
+# `core.orchestrator.orchestrator` both still return the same singleton,
+# just constructed the first time something actually asks for it (e.g.
+# api/routes.py's get_orchestrator(), on the first real request) rather
+# than at uvicorn startup. Trade-off: a broken MODEL_PATH/GGUF file now
+# surfaces on first request instead of at boot -- if you want fail-fast-
+# at-startup instead, call `core.orchestrator.orchestrator` once,
+# explicitly, during your app's startup event.
+# ---------------------------------------------------------------------------
+_orchestrator_singleton: Optional["Orchestrator"] = None
+
+
+def _build_default_orchestrator() -> "Orchestrator":
+    from core.llm_runtime import LLMRuntime
+    from agents.base import AgentConfig
+    from agents.summarizer import SummarizerAgent
+    from agents.extractor import ExtractorAgent
+    from agents.critic import CriticAgent
+
+    llm = LLMRuntime()
+    return Orchestrator(agents={
+        "summarizer": SummarizerAgent(
+            AgentConfig(
+                name="summarizer",
+                description="Condenses input text into a concise summary",
+            ),
+            llm,
+        ),
+        "extractor": ExtractorAgent(
+            AgentConfig(
+                name="extractor",
+                description="Extracts key points, entities, sentiment, and topics",
+            ),
+            llm,
+        ),
+        "critic": CriticAgent(
+            AgentConfig(
+                name="critic",
+                description="Evaluates summary + extraction quality against the original text",
+            ),
+            llm,
+        ),
+    })
+
+
+def __getattr__(name: str) -> Any:
+    """PEP 562 module-level lazy attribute. Only fires for names not
+    already bound at module scope -- i.e. only ever for `orchestrator`;
+    every other public name (Orchestrator, TaskStatus, exceptions, ...)
+    is a real top-level name defined earlier in this file and resolves
+    normally without this hook running at all."""
+    global _orchestrator_singleton
+    if name == "orchestrator":
+        if _orchestrator_singleton is None:
+            _orchestrator_singleton = _build_default_orchestrator()
+        return _orchestrator_singleton
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

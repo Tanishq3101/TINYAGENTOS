@@ -9,7 +9,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Enum, Float, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Enum, Float, String, Text
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -67,6 +67,27 @@ class AgentExecutionModel(Base):
     status = Column(String, nullable=False)
     output = Column(Text, nullable=True)
     error = Column(Text, nullable=True)
+
+
+class ApiKeyModel(Base):
+    """Store issued API keys.
+
+    Only the SHA-256 hash of a key is ever persisted here
+    (SecurityManager.hash_api_key) -- the raw key exists only at issuance
+    time (see scripts/manage_api_keys.py) and is never written to this
+    table or logged. This replaces the previous "any string starting
+    with sk-" format check in api/dependencies.py.verify_api_key() with a
+    real, revocable, per-caller credential.
+    """
+
+    __tablename__ = "api_keys"
+
+    id = Column(String, primary_key=True, default=_uuid, index=True)
+    key_hash = Column(String, nullable=False, unique=True, index=True)
+    label = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    revoked = Column(Boolean, default=False, nullable=False)
+    last_used_at = Column(DateTime, nullable=True)
 
 
 class OutputModel(Base):
