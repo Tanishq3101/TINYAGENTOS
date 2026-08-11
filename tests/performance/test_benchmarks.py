@@ -83,12 +83,33 @@ def test_single_task_latency_is_reasonable(fast_orchestrator, task_type: str) ->
     ), f"{task_type} median latency regressed: {stats.median_ms}ms (n={stats.n})"
 
 
-def test_full_pipeline_slower_than_single_agent_task(fast_orchestrator) -> None:
+def test_full_pipeline_slower_than_single_agent_task() -> None:
     """Sanity check that full_pipeline (3 agents) costs more than
     summarize (1 agent) -- catches a broken benchmark/fixture before it
-    catches a real regression."""
-    summarize_stats = benchmark_single_task_latency(fast_orchestrator, n=20, task_type="summarize")
-    full_stats = benchmark_single_task_latency(fast_orchestrator, n=20, task_type="full_pipeline")
+    catches a real regression.
+
+    Deliberately does NOT use the fast_orchestrator fixture (latency_ms=0.0)
+    used elsewhere in this file. At zero simulated latency this test was
+    observed to fail intermittently -- e.g. full_pipeline median 1.086ms
+    vs. summarize median 1.299ms, both sub-millisecond. At that scale the
+    "signal" this test wants to detect (full_pipeline doing genuinely more
+    work) is smaller than ordinary OS thread-scheduling jitter, so the
+    >= assertion becomes a coin flip rather than a real check.
+
+    Uses the same latency_ms=100.0 already established by
+    test_full_pipeline_runs_agents_concurrently_not_sequentially below
+    (its own comment: "large enough that thread-scheduling noise is
+    negligible") rather than picking a new, unvetted magnitude -- the
+    same noise problem applies here, and this value already has that
+    header's justification behind it.
+    """
+    orchestrator = build_orchestrator(latency_ms=100.0)
+    try:
+        summarize_stats = benchmark_single_task_latency(orchestrator, n=20, task_type="summarize")
+        full_stats = benchmark_single_task_latency(orchestrator, n=20, task_type="full_pipeline")
+    finally:
+        orchestrator.shutdown()
+
     assert full_stats.median_ms >= summarize_stats.median_ms
 
 

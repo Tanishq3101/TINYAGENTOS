@@ -460,7 +460,33 @@ def test_real_orchestrator_end_to_end():
         "critic": CriticAgent(AgentConfig(name="critic", description="", max_tokens=400), llm),
     }
 
-    orch = Orchestrator(agents)
+    # step_timeout_seconds override: Orchestrator's default (60.0,
+    # core/orchestrator.py) is a per-step ceiling enforced in
+    # _resolve_future() via future.result(timeout=...), and it only wraps
+    # the two steps that run concurrently through the thread pool here --
+    # summarizer and extractor (critic runs synchronously afterward, with
+    # no timeout of its own). On real hardware this test previously failed
+    # with "Step 'summarizer' failed: timed out after 60.0s" even though
+    # the step had genuinely succeeded -- the captured log showed
+    # summarizer completing in ~62.0s and extractor in ~95.5s, both past
+    # the 60s ceiling but neither actually stuck or broken.
+    #
+    # This mirrors the same latency-variance issue
+    # tests/integration/test_deployment_smoke.py already hit and fixed
+    # (see that file's EXECUTE_TIMEOUT_SECONDS, raised 90 -> 180 after
+    # scripts/benchmark_inference.py measured real generate() p99 latency
+    # up to ~19.7s with high variance). 180s here gives headroom above the
+    # ~95.5s observed for a single step on this hardware, while still
+    # catching a genuine hang/deadlock -- re-measure and adjust if the
+    # underlying model/hardware changes.
+    #
+    # Scoped to this test only, not Orchestrator's default: this is the
+    # only test in this file that runs real inference (every other test
+    # uses MockAgent, which returns instantly and is unaffected either
+    # way) -- raising the class-wide default would also loosen the
+    # timeout for the real production API, which needs its own separate
+    # justification, not one bundled into a test fix.
+    orch = Orchestrator(agents, step_timeout_seconds=180.0)
     task_id = orch.create_task(SAMPLE_TEXT)
     results = orch.execute_pipeline(task_id)
 
