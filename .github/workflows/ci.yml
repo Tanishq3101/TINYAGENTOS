@@ -49,6 +49,27 @@ jobs:
       - name: Type check (mypy)
         run: mypy .
 
+      - name: Ensure SQLite db file exists
+        run: |
+          # FIX: docker-compose.yml bind-mounts ../tinyagentos.db as a
+          # FILE (`- ../tinyagentos.db:/app/tinyagentos.db`). If that
+          # path doesn't exist on the host -- true for every fresh CI
+          # checkout, since this is a runtime artifact and correctly
+          # not committed -- Docker silently creates a DIRECTORY there
+          # instead, both inside the container and on the host. That
+          # breaks sqlite3 in the container ("unable to open database
+          # file") AND breaks every host-side pytest test that opens
+          # the same relative sqlite:///./tinyagentos.db path afterward
+          # (e.g. tests/e2e/test_complete_flow.py's TestClient), since
+          # they now find a directory sitting there too.
+          #
+          # chmod 666 because the file is created here as the runner
+          # user, but the container runs as appuser (uid 1000, see
+          # Dockerfile) -- world-writable avoids a uid mismatch instead
+          # of trying to guess/match uids across host and container.
+          touch tinyagentos.db
+          chmod 666 tinyagentos.db
+
       - name: Start Docker Compose
         env:
           SECRET_KEY: "test-secret-key-not-for-production-use-only-in-ci-32chars-min"
