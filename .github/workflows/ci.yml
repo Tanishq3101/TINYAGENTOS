@@ -14,23 +14,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Verify Docker Compose file
+      - name: Verify Docker files
         run: |
-          echo "Current directory:"
+          echo "Repository:"
           pwd
-
-          echo "Repository contents:"
           ls -la
 
-          echo "Docker Compose files:"
-          find . -maxdepth 3 \( \
-            -name "docker-compose.yml" -o \
-            -name "docker-compose.yaml" -o \
-            -name "compose.yml" -o \
-            -name "compose.yaml" \
-          \) -print
+          echo "Docker directory:"
+          ls -la docker/
 
-          test -f docker-compose.yml
+          test -f docker/docker-compose.yml
+          test -f docker/Dockerfile
+
+          echo "Docker files found successfully."
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -57,22 +53,28 @@ jobs:
         env:
           SECRET_KEY: "test-secret-key-not-for-production-use-only-in-ci-32chars-min"
         run: |
-          docker compose -f docker-compose.yml up -d --build
+          docker compose \
+            -f docker/docker-compose.yml \
+            up -d --build
 
       - name: Show Docker Compose status
         if: always()
         run: |
           echo "===== DOCKER COMPOSE STATUS ====="
-          docker compose -f docker-compose.yml ps -a
+          docker compose \
+            -f docker/docker-compose.yml \
+            ps -a
 
-          echo "===== ALL DOCKER CONTAINERS ====="
+          echo "===== ALL CONTAINERS ====="
           docker ps -a
 
-      - name: Show Docker logs after startup
+      - name: Show Docker logs
         if: always()
         run: |
           echo "===== DOCKER COMPOSE LOGS ====="
-          docker compose -f docker-compose.yml logs --no-color
+          docker compose \
+            -f docker/docker-compose.yml \
+            logs --no-color
 
       - name: Wait for API
         run: |
@@ -81,7 +83,9 @@ jobs:
 
             if curl -fsS http://localhost:8000/api/v1/health; then
               echo ""
-              echo "API is ready!"
+              echo "========================================"
+              echo "API IS READY"
+              echo "========================================"
               exit 0
             fi
 
@@ -96,11 +100,15 @@ jobs:
 
           echo ""
           echo "===== DOCKER COMPOSE STATUS ====="
-          docker compose -f docker-compose.yml ps -a
+          docker compose \
+            -f docker/docker-compose.yml \
+            ps -a
 
           echo ""
           echo "===== DOCKER COMPOSE LOGS ====="
-          docker compose -f docker-compose.yml logs --no-color
+          docker compose \
+            -f docker/docker-compose.yml \
+            logs --no-color
 
           exit 1
 
@@ -108,7 +116,9 @@ jobs:
         env:
           SECRET_KEY: "test-secret-key-not-for-production-use-only-in-ci-32chars-min"
         run: |
-          pytest --cov=. --cov-report=xml --cov-report=term-missing
+          pytest --cov=. \
+            --cov-report=xml \
+            --cov-report=term-missing
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -119,4 +129,6 @@ jobs:
       - name: Stop Docker Compose
         if: always()
         run: |
-          docker compose -f docker-compose.yml down -v
+          docker compose \
+            -f docker/docker-compose.yml \
+            down -v
