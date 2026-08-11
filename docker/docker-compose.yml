@@ -28,8 +28,10 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+
     ports:
       - "8000:8000"
+
     environment:
       - DEBUG=false
       - LOG_LEVEL=INFO
@@ -37,14 +39,20 @@ services:
       - MODEL_PATH=/app/models/phi-3-mini.gguf
       - DATABASE_URL=sqlite:///./tinyagentos.db
       - SECRET_KEY=${SECRET_KEY}
+
     volumes:
-      - ../logs:/app/logs
+      - tinyagentos_logs:/app/logs
       - ../models:/app/models
       - ../tinyagentos.db:/app/tinyagentos.db
+
     restart: unless-stopped
+
     networks:
       - tinyagentos-network
 
 networks:
   tinyagentos-network:
     driver: bridge
+
+volumes:
+  tinyagentos_logs:

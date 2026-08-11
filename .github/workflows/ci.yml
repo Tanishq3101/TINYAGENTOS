@@ -14,7 +14,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Find Docker Compose file
+      - name: Verify Docker Compose file
         run: |
           echo "Current directory:"
           pwd
@@ -22,28 +22,15 @@ jobs:
           echo "Repository contents:"
           ls -la
 
-          echo "Searching for Compose files..."
-          find . -maxdepth 5 \( \
+          echo "Docker Compose files:"
+          find . -maxdepth 3 \( \
             -name "docker-compose.yml" -o \
             -name "docker-compose.yaml" -o \
             -name "compose.yml" -o \
             -name "compose.yaml" \
           \) -print
 
-          COMPOSE_FILE=$(find . -maxdepth 5 \( \
-            -name "docker-compose.yml" -o \
-            -name "docker-compose.yaml" -o \
-            -name "compose.yml" -o \
-            -name "compose.yaml" \
-          \) -print -quit)
-
-          if [ -z "$COMPOSE_FILE" ]; then
-            echo "ERROR: No Docker Compose file found!"
-            exit 1
-          fi
-
-          echo "Found Compose file: $COMPOSE_FILE"
-          echo "COMPOSE_FILE=$COMPOSE_FILE" >> "$GITHUB_ENV"
+          test -f docker-compose.yml
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -70,34 +57,50 @@ jobs:
         env:
           SECRET_KEY: "test-secret-key-not-for-production-use-only-in-ci-32chars-min"
         run: |
-          echo "Using Compose file: $COMPOSE_FILE"
-          docker compose -f "$COMPOSE_FILE" up -d --build
+          docker compose -f docker-compose.yml up -d --build
 
       - name: Show Docker Compose status
+        if: always()
         run: |
-          docker compose -f "$COMPOSE_FILE" ps
+          echo "===== DOCKER COMPOSE STATUS ====="
+          docker compose -f docker-compose.yml ps -a
 
-      - name: Show Docker logs
-        if: failure()
+          echo "===== ALL DOCKER CONTAINERS ====="
+          docker ps -a
+
+      - name: Show Docker logs after startup
+        if: always()
         run: |
-          docker compose -f "$COMPOSE_FILE" logs --no-color
+          echo "===== DOCKER COMPOSE LOGS ====="
+          docker compose -f docker-compose.yml logs --no-color
 
       - name: Wait for API
         run: |
           for i in {1..60}; do
+            echo "Health check attempt $i/60"
+
             if curl -fsS http://localhost:8000/api/v1/health; then
-              echo "API is ready"
+              echo ""
+              echo "API is ready!"
               exit 0
             fi
 
-            echo "Waiting for API... ($i/60)"
+            echo "Waiting for API..."
             sleep 2
           done
 
-          echo "API failed to become ready"
+          echo ""
+          echo "========================================"
+          echo "API FAILED TO BECOME READY"
+          echo "========================================"
 
-          docker compose -f "$COMPOSE_FILE" ps
-          docker compose -f "$COMPOSE_FILE" logs --no-color
+          echo ""
+          echo "===== DOCKER COMPOSE STATUS ====="
+          docker compose -f docker-compose.yml ps -a
+
+          echo ""
+          echo "===== DOCKER COMPOSE LOGS ====="
+          docker compose -f docker-compose.yml logs --no-color
 
           exit 1
 
@@ -116,4 +119,4 @@ jobs:
       - name: Stop Docker Compose
         if: always()
         run: |
-          docker compose -f "$COMPOSE_FILE" down -v
+          docker compose -f docker-compose.yml down -v
