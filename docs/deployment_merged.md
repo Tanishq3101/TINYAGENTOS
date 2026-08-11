@@ -312,7 +312,7 @@ kubectl rollout undo deployment/tinyagentos
 - `last_used_at` on an API key row updating after a real request is a
   useful "auth actually worked end-to-end" signal
 
-## What's Not Configured / Known Gaps
+### What's Not Configured / Known Gaps
 
 - No resource limits on the Docker container (`mem_limit`, `cpus`, or
   Compose `deploy.resources`) — unbounded host memory/CPU use possible
