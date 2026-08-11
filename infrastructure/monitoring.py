@@ -44,44 +44,56 @@ from __future__ import annotations
 
 import time
 from contextlib import contextmanager
-from typing import Iterator, Optional
+from typing import TYPE_CHECKING, Iterator, Optional
 
-try:
+# WHY TYPE_CHECKING, NOT A PLAIN try/except FOR THE TYPES
+# ---------------------------------------------------------
+# mypy statically analyzes BOTH branches of a runtime try/except
+# regardless of whether the import actually succeeds. That means what
+# mypy thinks `Counter`/`Gauge`/`Histogram` ARE depends on whether
+# prometheus_client happens to be installed in whatever environment
+# mypy itself is run in -- which silently drifts between machines/CI.
+# `if TYPE_CHECKING:` sidesteps that: mypy always evaluates this branch
+# (and only this branch) for type-checking purposes, so call sites are
+# always checked against the real prometheus_client classes, and the
+# runtime fallback logic below is never type-checked branch-by-branch
+# (so reassigning the names there isn't a "redefinition" to mypy).
+if TYPE_CHECKING:
     from prometheus_client import Counter, Gauge, Histogram
 
     _PROMETHEUS_AVAILABLE = True
-except ImportError:
-    _PROMETHEUS_AVAILABLE = False
+else:
+    try:
+        from prometheus_client import Counter, Gauge, Histogram
 
-    class _NoOpMetric:
-        """Stand-in used when prometheus_client isn't installed, so every
-        call site (task_counter.labels(...).inc(), histogram.observe(...),
-        etc.) still works without branching on availability everywhere."""
+        _PROMETHEUS_AVAILABLE = True
+    except ImportError:
+        _PROMETHEUS_AVAILABLE = False
 
-        def __init__(self, *args, **kwargs) -> None:
-            pass
+        class _NoOpMetric:
+            """Stand-in used when prometheus_client isn't installed, so every
+            call site (task_counter.labels(...).inc(), histogram.observe(...),
+            etc.) still works without branching on availability everywhere."""
 
-        def labels(self, *args, **kwargs) -> "_NoOpMetric":
-            return self
+            def __init__(self, *args, **kwargs) -> None:
+                pass
 
-        def inc(self, *args, **kwargs) -> None:
-            pass
+            def labels(self, *args, **kwargs) -> "_NoOpMetric":
+                return self
 
-        def dec(self, *args, **kwargs) -> None:
-            pass
+            def inc(self, *args, **kwargs) -> None:
+                pass
 
-        def observe(self, *args, **kwargs) -> None:
-            pass
+            def dec(self, *args, **kwargs) -> None:
+                pass
 
-        def set(self, *args, **kwargs) -> None:
-            pass
+            def observe(self, *args, **kwargs) -> None:
+                pass
 
-    # No ignore needed here: Counter/Gauge/Histogram only exist in this
-    # except branch (the try-block import never bound them if we got
-    # here), so this is a fresh assignment from mypy's point of view, not
-    # a redefinition that needs silencing. Any type: ignore on this line
-    # is therefore unused, which is exactly what strict mode flagged.
-    Counter = Gauge = Histogram = _NoOpMetric
+            def set(self, *args, **kwargs) -> None:
+                pass
+
+        Counter = Gauge = Histogram = _NoOpMetric  # type: ignore[misc,assignment]
 
 
 # Buckets sized to Day 18-19's real observed range (see module docstring).
