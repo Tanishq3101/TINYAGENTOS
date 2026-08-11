@@ -56,3 +56,4 @@ flake8==6.1.0
 mypy==1.7.1
 bandit==1.7.5
 pre-commit==3.5.0
+pbr==7.0.3
