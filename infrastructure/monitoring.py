@@ -76,7 +76,12 @@ except ImportError:
         def set(self, *args, **kwargs) -> None:
             pass
 
-    Counter = Gauge = Histogram = _NoOpMetric  # type: ignore[assignment,misc]
+    # No ignore needed here: Counter/Gauge/Histogram only exist in this
+    # except branch (the try-block import never bound them if we got
+    # here), so this is a fresh assignment from mypy's point of view, not
+    # a redefinition that needs silencing. Any type: ignore on this line
+    # is therefore unused, which is exactly what strict mode flagged.
+    Counter = Gauge = Histogram = _NoOpMetric
 
 
 # Buckets sized to Day 18-19's real observed range (see module docstring).
@@ -161,6 +166,13 @@ def sample_memory_usage() -> Optional[float]:
     except ImportError:
         return None
 
-    rss_mb = psutil.Process().memory_info().rss / (1024 * 1024)
+    # MYPY FIX (was: "Returning Any from function declared to return
+    # 'float | None'"): psutil has no installed type stubs, so
+    # memory_info().rss types as Any -- the explicit float() cast gives
+    # mypy a concrete return type instead of propagating Any. (Installing
+    # `types-psutil` is the other option here, per the earlier mypy run's
+    # "Library stubs not installed for psutil" warning -- either fixes
+    # this line, but the cast doesn't depend on that being done too.)
+    rss_mb = float(psutil.Process().memory_info().rss / (1024 * 1024))
     memory_usage.set(rss_mb)
     return rss_mb

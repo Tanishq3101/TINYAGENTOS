@@ -54,7 +54,7 @@ from __future__ import annotations
 import hashlib
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
@@ -96,7 +96,13 @@ except ImportError:  # pragma: no cover - defensive
 try:
     from infrastructure.resource_monitor import ResourceMonitor
 except ImportError:  # pragma: no cover - defensive
-    ResourceMonitor = None  # type: ignore[assignment,misc]
+    # MYPY FIX (was: "Unused type: ignore[assignment, misc]"): unlike
+    # MetricsCollector above, infrastructure.resource_monitor resolves to
+    # Any under ignore_missing_imports=true (it isn't a real, typed
+    # module yet), so assigning None to ResourceMonitor here needs no
+    # suppression at all -- the old ignore comment was suppressing an
+    # error that was never actually raised on this line.
+    ResourceMonitor = None
 
 
 __all__ = [
@@ -466,7 +472,14 @@ class Orchestrator:
         task = self._get_task_for_execution(task_id)
 
         if task["status"] == TaskStatus.COMPLETED:
-            return task["results"]
+            # MYPY FIX (was: "Returning Any from function declared to
+            # return dict[str, Any]"): task is typed Dict[str, Any], so
+            # task["results"] resolves to bare Any under strict mode's
+            # warn_return_any -- routing it through an explicitly
+            # annotated local lets mypy confirm the static type before
+            # the return, instead of returning unresolved Any directly.
+            cached_results: Dict[str, Any] = task["results"]
+            return cached_results
 
         if self._enable_resource_checks:
             try:
@@ -615,7 +628,7 @@ class Orchestrator:
             agent_name, success=True, output=result.get("output"), duration_ms=duration_ms
         )
 
-    def _resolve_future(self, future, agent_name: str) -> _StepOutcome:
+    def _resolve_future(self, future: "Future[_StepOutcome]", agent_name: str) -> _StepOutcome:
         try:
             return future.result(timeout=self._step_timeout_seconds)
         except FutureTimeoutError:

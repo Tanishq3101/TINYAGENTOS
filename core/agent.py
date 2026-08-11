@@ -22,6 +22,7 @@ class BaseAgent:
         # is created automatically per session_id. use_memory=False
         # gives fully stateless behavior identical to before this
         # feature existed.
+        self.memory: Optional[ConversationMemory]
         if memory is not None:
             self.memory = memory
         elif use_memory:
@@ -69,7 +70,7 @@ class BaseAgent:
     # ========================================
     # 🧠 EXTRACT JSON (ROBUST)
     # ========================================
-    def _extract_json(self, text: str) -> dict:
+    def _extract_json(self, text: str) -> Optional[dict]:
         if not text:
             return None
 

@@ -46,8 +46,17 @@ class MetricsCollector:
 
     def get_pipeline_summary(self) -> dict[str, Any]:
         """Generate a summary of the whole pipeline run so far."""
-        completed = [m for m in self.metrics if m.execution_time_ms is not None]
-        total_time = sum(m.execution_time_ms for m in completed)
+        # Filtering and summing in the same generator (rather than building
+        # a separate `completed` list first) lets mypy narrow
+        # `execution_time_ms` to `float` within this expression -- summing
+        # over a pre-filtered list left it typed `float | None` here, since
+        # the None-check lived in a separate comprehension mypy couldn't
+        # connect back to this one. Also a real runtime safety net: if a
+        # None ever slipped through, sum() would previously have crashed
+        # with TypeError at runtime instead of failing a type check.
+        total_time = sum(
+            m.execution_time_ms for m in self.metrics if m.execution_time_ms is not None
+        )
         error_count = sum(1 for m in self.metrics if m.error)
 
         return {

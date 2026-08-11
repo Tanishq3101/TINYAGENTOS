@@ -57,6 +57,7 @@ psutil==5.9.8
 pytest==8.2.2
 pytest-asyncio==0.21.1
 pytest-cov==4.1.0
+types-requests==2.31.0.20240311
 # httpx is a hard requirement of fastapi.testclient.TestClient (used
 # throughout tests/test_day11.py and tests/test_middleware.py) -- it was
 # present in your conda env but missing from this file, meaning a fresh

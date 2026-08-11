@@ -20,9 +20,18 @@ import logging
 import logging.handlers
 import sys
 import os
+from typing import Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # logging.StreamHandler only became subscriptable (generic) in Python 3.11+.
+    # Guarding this under TYPE_CHECKING keeps the annotation for type checkers
+    # without breaking at import time on 3.10.
+    _StreamHandlerBase = logging.StreamHandler[Any]
+else:
+    _StreamHandlerBase = logging.StreamHandler
 
 
-class UTF8StreamHandler(logging.StreamHandler):
+class UTF8StreamHandler(_StreamHandlerBase):
     """
     Custom stream handler that handles UTF-8 encoding on Windows.
 
@@ -30,7 +39,7 @@ class UTF8StreamHandler(logging.StreamHandler):
     This handler gracefully handles encoding errors.
     """
 
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord) -> None:
         """Emit a record, handling encoding errors gracefully."""
         try:
             msg = self.format(record)
@@ -107,7 +116,7 @@ logger = setup_logger()
 
 
 # Utility functions
-def log_error(message: str, exc: Exception = None, **kwargs):
+def log_error(message: str, exc: Optional[Exception] = None, **kwargs: Any) -> None:
     """Log an error with optional exception details."""
     if exc:
         logger.error(f"{message}: {str(exc)}", extra=kwargs)
@@ -115,16 +124,16 @@ def log_error(message: str, exc: Exception = None, **kwargs):
         logger.error(message, extra=kwargs)
 
 
-def log_info(message: str, **kwargs):
+def log_info(message: str, **kwargs: Any) -> None:
     """Log an info message with context."""
     logger.info(message, extra=kwargs)
 
 
-def log_debug(message: str, **kwargs):
+def log_debug(message: str, **kwargs: Any) -> None:
     """Log a debug message with context."""
     logger.debug(message, extra=kwargs)
 
 
-def log_warning(message: str, **kwargs):
+def log_warning(message: str, **kwargs: Any) -> None:
     """Log a warning message with context."""
     logger.warning(message, extra=kwargs)

@@ -1,6 +1,6 @@
 import time
 from functools import wraps
-from typing import Any, Callable, Tuple, Type
+from typing import Any, Callable, Optional, Tuple, Type
 
 from infrastructure.logging import logger
 
@@ -33,7 +33,7 @@ class RetryPolicy:
 def retry_on_exception(
     policy: RetryPolicy,
     exceptions: Tuple[Type[BaseException], ...] = (Exception,),
-):
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator that retries a function according to the given
     RetryPolicy whenever it raises one of the specified exception
     types. Re-raises the last exception if every attempt fails.
@@ -46,10 +46,18 @@ def retry_on_exception(
             ...
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
-        def wrapper(*args, **kwargs) -> Any:
-            last_exception: BaseException = None
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            # Optional[BaseException], not BaseException, since it
+            # genuinely starts unset. RetryPolicy.__init__ guarantees
+            # max_retries >= 1, so the loop below always runs at least
+            # once and last_exception is always set by the time we'd
+            # raise it -- the assert makes that guarantee explicit and
+            # checkable instead of implicit, and turns a would-be
+            # confusing "raise None -> TypeError" into a clear
+            # AssertionError if that guarantee is ever violated.
+            last_exception: Optional[BaseException] = None
 
             for attempt in range(policy.max_retries):
                 try:
@@ -72,6 +80,10 @@ def retry_on_exception(
                     )
                     time.sleep(delay)
 
+            assert last_exception is not None, (
+                "unreachable: RetryPolicy guarantees max_retries >= 1, so the "
+                "loop above always runs and sets last_exception before this point"
+            )
             raise last_exception
 
         return wrapper

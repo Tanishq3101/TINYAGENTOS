@@ -131,4 +131,24 @@ def get_settings() -> Settings:
     - Avoid re-reading env file multiple times
     - Improve performance across system
     """
-    return Settings()
+    # MYPY FIX (was: "Invalid 'type: ignore' comment [syntax]"): this
+    # explanatory block used to *start* with the text "type: ignore[...]",
+    # which mypy parses as an ignore-directive attempt on ANY comment line
+    # starting with "# type:", not just ones attached to code -- the
+    # trailing prose after the brackets then failed to match the expected
+    # directive syntax. Reworded so only the real directive below (attached
+    # to the `return Settings()` line) is parsed as an ignore comment.
+    #
+    # Ignore justification: SECRET_KEY has no default
+    # (by design -- startup must fail without a real one), so mypy sees
+    # this as a missing required constructor argument. That's a false
+    # positive: pydantic-settings' BaseSettings populates required
+    # fields from the environment / .env file at runtime, after mypy
+    # has already finished its static check -- mypy can't see into
+    # os.environ or .env to know the value is actually supplied. This
+    # is a well-known, unavoidable friction point between
+    # pydantic-settings and mypy, not a real bug. If SECRET_KEY is
+    # genuinely missing/invalid, Settings() still raises a real
+    # pydantic ValidationError at runtime -- that safety net is
+    # untouched by this ignore.
+    return Settings()  # type: ignore[call-arg]

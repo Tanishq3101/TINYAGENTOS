@@ -40,14 +40,26 @@ from infrastructure.logging import logger
 
 class LLMRuntime:
     _instance: Optional["LLMRuntime"] = None
+    # MYPY FIX (was: "Cannot determine type of _initialized" [has-type]):
+    # previously this attribute was only ever set at the very end of
+    # __init__, so mypy had no annotation to check the hasattr()/truthy
+    # check above against. A class-level default makes the type explicit
+    # and turns the singleton short-circuit check into a plain attribute
+    # read instead of hasattr().
+    _initialized: bool = False
 
-    def __new__(cls):
+    # MYPY FIX (was: "Call to untyped function LLMRuntime in typed context"
+    # [no-untyped-call] at orchestrator.py:795 and agent.py:18): __new__/
+    # __init__ had no signature types, so mypy couldn't verify any call
+    # into this class from elsewhere. Annotating both closes that gap at
+    # its source instead of silencing it at every call site.
+    def __new__(cls) -> "LLMRuntime":
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self):
-        if hasattr(self, "_initialized") and self._initialized:
+    def __init__(self) -> None:
+        if self._initialized:
             return
 
         self.settings = get_settings()
@@ -117,7 +129,22 @@ class LLMRuntime:
 
             # ✅ SAFE EXTRACTION
             if isinstance(output, dict):
-                choices = output.get("choices", [{}])
+                # MYPY FIX (was: "Invalid 'type: ignore' comment [syntax]"):
+                # this explanatory block used to *start* with the text
+                # "type: ignore[...]", which mypy parses as an ignore-directive
+                # attempt on ANY comment line starting with "# type:", not just
+                # ones attached to code -- reworded so only the real directive
+                # below (attached to the `output.get(...)` line) is parsed as
+                # an ignore comment.
+                #
+                # Ignore justification -- llama_cpp's CompletionChoice
+                # TypedDict requires text/index/logprobs/finish_reason, but this
+                # [{}] is only ever a defensive empty-fallback that's read right
+                # below via .get(key, default) on every key we touch, so a
+                # "short" dict here can never KeyError. Not a real bug -- see
+                # Tier 3 triage notes above -- silenced rather than restructured
+                # so we don't change working, safe behavior for a typing-only gap.
+                choices = output.get("choices", [{}])  # type: ignore[typeddict-item]
                 raw_text = choices[0].get("text", "") if choices else ""
                 finish_reason = choices[0].get("finish_reason") if choices else None
                 logger.debug(f"Finish reason: {finish_reason}")

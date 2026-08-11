@@ -55,6 +55,18 @@ class ConversationMemory:
     # Persistence
     # ------------------------------------------------------------------
     def _file_path(self) -> Path:
+        # persist_dir is Optional[Path] -- every current caller (_load,
+        # _save, clear) already checks `self.persist and self.persist_dir`
+        # before reaching here, but that guard lives in the callers, not
+        # this method. Without this explicit check, a future call site
+        # that forgets the guard would hit `None / "..."` and crash with
+        # a confusing AttributeError several frames from the real cause.
+        # This also lets mypy narrow persist_dir to Path below.
+        if self.persist_dir is None:
+            raise RuntimeError(
+                "_file_path() called but persist_dir is not configured "
+                "(ConversationMemory was constructed with persist_dir=None)"
+            )
         safe_id = "".join(c for c in self.session_id if c.isalnum() or c in ("-", "_")) or "default"
         return self.persist_dir / f"{safe_id}.json"
 
