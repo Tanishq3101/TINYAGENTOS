@@ -39,6 +39,13 @@ services:
       - MODEL_PATH=/app/models/phi-3-mini.gguf
       - DATABASE_URL=sqlite:///./tinyagentos.db
       - SECRET_KEY=${SECRET_KEY}
+      # CI SMOKE-TEST FIX: opt-in only -- unset in any real .env, this
+      # defaults to "0" (real Llama() load, as always). CI sets it to
+      # "1" explicitly (see ci.yml's "Start Docker Compose" step) so the
+      # health check can pass without downloading multi-GB model weights
+      # on every run. See core/llm_runtime.py's __init__ for the actual
+      # skip logic this flag controls.
+      - TINYAGENT_SKIP_LLM_LOAD=${TINYAGENT_SKIP_LLM_LOAD:-0}
 
     volumes:
       - tinyagentos_logs:/app/logs

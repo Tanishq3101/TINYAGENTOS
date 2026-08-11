@@ -52,6 +52,17 @@ jobs:
       - name: Start Docker Compose
         env:
           SECRET_KEY: "test-secret-key-not-for-production-use-only-in-ci-32chars-min"
+          # CI SMOKE-TEST FIX: without this, LLMRuntime.__init__ (in
+          # core/llm_runtime.py) tries to load the real phi-3-mini.gguf,
+          # which was never downloaded on the CI runner (models/ is
+          # empty here) -- that crashed app startup on every single run.
+          # This makes the container skip the model load and report
+          # model_loaded: false on /health instead, so the smoke test
+          # can actually verify "does the API boot and route requests"
+          # without needing multi-GB weights in CI. Read by
+          # docker-compose.yml's environment block, which passes it
+          # through into the container.
+          TINYAGENT_SKIP_LLM_LOAD: "1"
         run: |
           docker compose \
             -f docker/docker-compose.yml \
@@ -81,11 +92,20 @@ jobs:
           for i in {1..60}; do
             echo "Health check attempt $i/60"
 
-            if curl -fsS http://localhost:8000/api/v1/health; then
+            if response=$(curl -fsS http://localhost:8000/api/v1/health); then
               echo ""
               echo "========================================"
               echo "API IS READY"
               echo "========================================"
+              # NOTE: prints model_loaded for visibility only -- it is
+              # expected to be false here (TINYAGENT_SKIP_LLM_LOAD=1 was
+              # set in the "Start Docker Compose" step above), and that
+              # is NOT a failure. This step only checks that the API
+              # process is up and routing requests, per Option A (see
+              # core/llm_runtime.py) -- real inference is exercised by a
+              # separate, model-backed integration job, not this smoke
+              # test.
+              echo "$response"
               exit 0
             fi
 
@@ -115,6 +135,15 @@ jobs:
       - name: Run tests with coverage
         env:
           SECRET_KEY: "test-secret-key-not-for-production-use-only-in-ci-32chars-min"
+          # Same reasoning as the "Start Docker Compose" step above --
+          # pytest runs directly on this runner, not inside the
+          # container, but any test that imports api.app or
+          # core.orchestrator (e.g. via TestClient) will trigger the
+          # exact same LLMRuntime() model load on the host, where
+          # models/ is equally empty. Without this, that import would
+          # crash pytest collection/setup regardless of the Docker fix
+          # above.
+          TINYAGENT_SKIP_LLM_LOAD: "1"
         run: |
           pytest --cov=. \
             --cov-report=xml \

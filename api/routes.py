@@ -35,6 +35,7 @@ from datetime import datetime
 from api.dependencies import verify_api_key, get_orchestrator
 from api.schemas import TaskRequest, TaskResponse
 from core.orchestrator import Orchestrator
+from core.llm_runtime import LLMRuntime, ModelNotLoadedError
 from infrastructure.logging import logger
 
 # ========================================
@@ -65,12 +66,29 @@ async def health_check() -> dict:
     """
     Health check endpoint.
 
+    PATCHED: now reports whether the LLM model is actually loaded, via
+    LLMRuntime.is_loaded (see core/llm_runtime.py -- __init__ skips
+    loading, rather than crashing, when MODEL_PATH is missing or
+    TINYAGENT_SKIP_LLM_LOAD=1 is set, e.g. in CI smoke tests). Calling
+    LLMRuntime() here is cheap: it's a singleton and api/app.py's
+    lifespan already constructs it once at boot (via
+    core.orchestrator.orchestrator) -- this just reads the existing
+    instance, it does not re-run model loading.
+
+    `status` stays "healthy" either way -- the API process itself is up
+    and serving requests, which is what this field has always meant.
+    `model_loaded` is the new, separate signal for "can this instance
+    actually run inference right now", which callers should check
+    before hitting /tasks/{task_id}/execute if they want to fail fast
+    instead of getting a 503 from that endpoint.
+
     Returns:
         dict: Service health status
     """
     logger.info("Health check requested")
     return {
         "status": "healthy",
+        "model_loaded": LLMRuntime().is_loaded,
         "timestamp": datetime.utcnow().isoformat(),
     }
 
@@ -178,6 +196,18 @@ async def execute_task(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(e),
             )
+
+    # PATCHED: must be caught before the generic `except Exception` below
+    # -- otherwise a missing/skipped model (see core/llm_runtime.py) would
+    # surface here as an opaque 500 "Task execution failed" instead of a
+    # clean, specific 503 that tells the caller *why* (and that retrying
+    # right now won't help until a model is actually loaded).
+    except ModelNotLoadedError as e:
+        logger.warning(f"Task execution failed -- model not loaded: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
 
     except Exception as e:
         logger.error(f"Task execution failed: {e}")

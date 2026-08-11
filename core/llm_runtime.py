@@ -31,11 +31,20 @@ this lock for the ~1 model call each takes, rather than crashing the
 interpreter.
 """
 
+import os
 import threading
 from typing import Optional
 from llama_cpp import Llama
 from infrastructure.config import get_settings
 from infrastructure.logging import logger
+
+
+class ModelNotLoadedError(RuntimeError):
+    """Raised by generate() when LLMRuntime was constructed without a
+    loaded model (missing MODEL_PATH, or TINYAGENT_SKIP_LLM_LOAD=1 --
+    see LLMRuntime.__init__). Callers (e.g. api routes) should catch
+    this and return a clean 503, rather than letting it propagate as
+    an unhandled 500."""
 
 
 class LLMRuntime:
@@ -71,8 +80,44 @@ class LLMRuntime:
         # singleton instance, so this never gets recreated/reset).
         self._inference_lock = threading.Lock()
 
+        # CI/SMOKE-TEST FIX: previously this unconditionally called
+        # Llama(model_path=...), which raises ValueError and kills the
+        # whole app (see api/app.py's lifespan -- it imports
+        # core.orchestrator.orchestrator eagerly at boot) whenever the
+        # multi-GB .gguf isn't present. That's the correct behavior for
+        # a real deployment, but CI has no reason to download real model
+        # weights just to prove the API boots and routes respond.
+        #
+        # TINYAGENT_SKIP_LLM_LOAD=1 is the explicit "smoke-test mode"
+        # opt-in (set it in ci.yml's `docker compose up` step, not in
+        # docker-compose.yml's defaults, so real deployments never set
+        # it by accident). We ALSO fall back to skip-with-warning if the
+        # configured path just doesn't exist on disk -- that keeps a
+        # genuinely misconfigured MODEL_PATH from crash-looping the
+        # entire process, and instead surfaces as `model_loaded: false`
+        # on /health where it's actually visible and debuggable.
+        skip_requested = os.environ.get("TINYAGENT_SKIP_LLM_LOAD") == "1"
+        model_path = self.settings.MODEL_PATH
+        model_missing = not (model_path and os.path.exists(model_path))
+
+        if skip_requested or model_missing:
+            self.model = None
+            if skip_requested:
+                logger.warning(
+                    "TINYAGENT_SKIP_LLM_LOAD=1 set -- skipping LLM load "
+                    "(smoke-test mode; inference endpoints will 503)."
+                )
+            else:
+                logger.warning(
+                    f"MODEL_PATH not found at '{model_path}' -- skipping "
+                    "LLM load. Inference endpoints will return 503 until "
+                    "a valid model file is present."
+                )
+            self._initialized = True
+            return
+
         self.model = Llama(
-            model_path=self.settings.MODEL_PATH,
+            model_path=model_path,
             n_ctx=self.settings.N_CTX,
             n_threads=self.settings.N_THREADS,
             n_gpu_layers=self.settings.N_GPU_LAYERS,
@@ -81,6 +126,13 @@ class LLMRuntime:
 
         logger.info("LLM model loaded successfully")
         self._initialized = True
+
+    @property
+    def is_loaded(self) -> bool:
+        """Used by /health (and anything else that wants to report real
+        model status) to distinguish 'app is up' from 'app can actually
+        run inference' -- see ModelNotLoadedError docstring above."""
+        return self.model is not None
 
     # ============================================================
     # STOP TOKENS / TURN MARKERS
@@ -97,6 +149,16 @@ class LLMRuntime:
         temperature = temperature or self.settings.TEMPERATURE
 
         logger.debug(f"Generating response | Prompt length: {len(prompt)}")
+
+        # See ModelNotLoadedError docstring: __init__ may have skipped
+        # loading (missing MODEL_PATH, or TINYAGENT_SKIP_LLM_LOAD=1).
+        # Fail with a clear, catchable error here rather than letting
+        # `self.model(...)` below raise a confusing TypeError on None.
+        if self.model is None:
+            raise ModelNotLoadedError(
+                "LLM model is not loaded (missing MODEL_PATH or "
+                "TINYAGENT_SKIP_LLM_LOAD=1) -- inference is unavailable."
+            )
 
         try:
             # ✅ FIX: use phi-3's real chat template.
