@@ -61,7 +61,9 @@ class FakeOrchestrator:
 
     # FIXED: was `text`, now matches real Orchestrator.create_task's
     # first positional/keyword parameter name, input_data.
-    def create_task(self, input_data: str, task_type: str = "full_pipeline", priority: int = 1) -> str:
+    def create_task(
+        self, input_data: str, task_type: str = "full_pipeline", priority: int = 1
+    ) -> str:
         if self._raise_on_create is not None:
             raise self._raise_on_create
         task_id = f"fake-{len(self.tasks) + 1}"

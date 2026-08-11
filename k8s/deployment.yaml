@@ -1,0 +1,176 @@
+# k8s/deployment.yaml
+#
+# CONFIRMED, NOT GUESSED
+# -----------------------
+# - Port 8000, healthcheck path /api/v1/health, non-root appuser (UID
+#   1000): all taken directly from docker/Dockerfile.
+# - Env var names (DEBUG, LOG_LEVEL, REQUIRE_AUTH, MODEL_PATH,
+#   DATABASE_URL, SECRET_KEY): taken directly from
+#   docker/docker-compose.yml, which itself was already corrected once
+#   against infrastructure/config.py's real Settings fields.
+#
+# A DELIBERATE CHOICE, NOT AN OVERSIGHT: replicas: 1
+# -----------------------------------------------------
+# This app uses SQLite (DATABASE_URL=sqlite:///./tinyagentos.db).
+# SQLite does not safely support concurrent writers across separate
+# processes/pods -- multiple replicas each writing to the same file (or
+# worse, separate files if the volume isn't actually shared) will
+# corrupt data or silently diverge. Do NOT raise replicas above 1 until
+# DATABASE_URL points at a real network-accessible database (e.g.
+# Postgres) with a connection-pooling-safe driver. Horizontal scaling of
+# this specific app, as currently built, is not just a resource-limits
+# question -- it's a data-integrity one.
+#
+# THE MODEL FILE IS DELIBERATELY NOT BAKED INTO THE IMAGE
+# -----------------------------------------------------------
+# The GGUF model file is multi-GB. Baking it into the container image
+# (as a naive `COPY models/ /app/models/` would) means every image
+# build/push/pull moves that many GB, on every rebuild, even for a
+# one-line code change. Instead this uses an initContainer to fetch the
+# model into a shared emptyDir before the app container starts.
+#
+# ASSUMPTION: the exact model source/filename here matches the CI
+# workflow's MODEL_HF_REPO/MODEL_HF_FILE
+# (microsoft/Phi-3-mini-4k-instruct-gguf /
+# Phi-3-mini-4k-instruct-q4.gguf, confirmed as the official Microsoft
+# GGUF repo via web search) -- verify this is the same quantization
+# you're actually running against locally (models/phi-3-mini.gguf) and
+# adjust MODEL_PATH / the initContainer command together if not.
+#
+# NOT INCLUDED HERE, ON PURPOSE: no real cluster/registry/ingress
+# details are assumed. IMAGE_PLACEHOLDER below must be replaced with
+# your actual ghcr.io/<owner>/<repo>:<tag> before applying -- this
+# manifest is a ready-to-adapt artifact, not evidence that a live
+# cluster or CD pipeline already exists.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tinyagentos
+  labels:
+    app: tinyagentos
+spec:
+  replicas: 1  # see note above -- do not increase without a real DB first
+  strategy:
+    type: Recreate  # not RollingUpdate: two pods can't safely share the SQLite PVC at once
+  selector:
+    matchLabels:
+      app: tinyagentos
+  template:
+    metadata:
+      labels:
+        app: tinyagentos
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000    # matches Dockerfile's `useradd -m -u 1000 appuser`
+        fsGroup: 1000
+
+      initContainers:
+        - name: fetch-model
+          image: python:3.10-slim
+          command:
+            - sh
+            - -c
+            - |
+              pip install --no-cache-dir huggingface_hub && \
+              huggingface-cli download microsoft/Phi-3-mini-4k-instruct-gguf \
+                Phi-3-mini-4k-instruct-q4.gguf \
+                --local-dir /models --local-dir-use-symlinks False
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+
+      containers:
+        - name: tinyagentos
+          image: IMAGE_PLACEHOLDER  # e.g. ghcr.io/your-org/tinyagentos:latest
+          ports:
+            - containerPort: 8000
+              name: http
+
+          env:
+            - name: DEBUG
+              value: "false"
+            - name: LOG_LEVEL
+              value: "INFO"
+            - name: REQUIRE_AUTH
+              value: "true"
+            - name: MODEL_PATH
+              value: "/app/models/Phi-3-mini-4k-instruct-q4.gguf"
+            - name: DATABASE_URL
+              value: "sqlite:///./data/tinyagentos.db"
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tinyagentos-secrets
+                  key: secret-key
+
+          volumeMounts:
+            - name: model-storage
+              mountPath: /app/models
+            - name: db-storage
+              mountPath: /app/data
+            - name: logs
+              mountPath: /app/logs
+
+          # Same path the Dockerfile's own HEALTHCHECK already confirmed:
+          # bare /health 404s, the router prefix is /api/v1.
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8000
+            initialDelaySeconds: 45   # matches Dockerfile HEALTHCHECK --start-period=45s
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+
+      volumes:
+        - name: model-storage
+          emptyDir:
+            sizeLimit: 8Gi   # adjust to your actual model file size
+        - name: db-storage
+          persistentVolumeClaim:
+            claimName: tinyagentos-db-pvc
+        - name: logs
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tinyagentos-db-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce   # single-pod access only -- see replicas: 1 note above
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+# Not committed with a real value. Create out-of-band, e.g.:
+#   kubectl create secret generic tinyagentos-secrets \
+#     --from-literal=secret-key="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')"
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tinyagentos-secrets
+type: Opaque
+stringData:
+  secret-key: REPLACE_ME_DO_NOT_COMMIT_A_REAL_VALUE

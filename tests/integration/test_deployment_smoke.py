@@ -24,6 +24,22 @@ Prerequisites:
     LLM-dependent tests below it will just hang/timeout if you run this
     too early rather than giving you a clean failure)
 
+API KEY (CHANGED)
+------------------
+Was previously a hardcoded `API_KEY = "sk-test"` module constant.
+Changed to read from the TINYAGENTOS_TEST_API_KEY env var, falling
+back to "sk-test" only so this file keeps working unmodified against
+whatever container-startup seeding step provisions that value for the
+Docker/CI path (not shown in this session -- check docker/ or
+api/app.py's startup hook if you need to confirm what seeds it).
+
+Never hardcode a real credential in a committed test file, even a
+low-stakes dev-only one -- the env-var-with-fallback pattern here means:
+  - CI/Docker path: unaffected, still gets "sk-test" with zero config
+  - Local/other envs: override with your own issued key, no source edit
+    required:
+        export TINYAGENTOS_TEST_API_KEY="sk-<your real issued key>"
+
 Run:
     pytest tests/integration/test_deployment_smoke.py -v -s
 
@@ -32,6 +48,7 @@ latency) that's useful to eyeball on every run, not just on failure.
 """
 
 import json
+import os
 import subprocess
 import time
 
@@ -39,7 +56,7 @@ import pytest
 import requests
 
 BASE_URL = "http://localhost:8000"
-API_KEY = "sk-test"
+API_KEY = os.getenv("TINYAGENTOS_TEST_API_KEY", "sk-test")
 HEADERS = {"X-API-Key": API_KEY}
 CONTAINER_NAME = "docker-tinyagentos-1"
 
@@ -57,11 +74,7 @@ CONTAINER_NAME = "docker-tinyagentos-1"
 # extractor queued on llm_runtime.py's _inference_lock, then critic
 # after) -- observed 48.3s on a passing run, but with per-call p99 that
 # high, three calls landing anywhere near their tail can plausibly
-# exceed 90s by chance alone, with no bug involved: this was confirmed
-# by test_full_pipeline_evaluation_lists_are_clean_phrases timing out at
-# exactly 90s on an otherwise-unmodified, already-reverted codebase,
-# immediately after test_full_pipeline_exercises_all_three_agents (the
-# same 3-call path) passed in 48.3s in the same run. 180s keeps this a
+# exceed 90s by chance alone, with no bug involved. 180s keeps this a
 # real hang/deadlock detector -- a genuine bug still fails loudly --
 # while giving three real-inference calls enough headroom that normal
 # latency variance doesn't produce a false failure. Re-measure and
@@ -207,9 +220,9 @@ def _create_and_execute(task_type: str, text: str) -> dict:
     elapsed = time.time() - t0
     print(f"\n[{task_type}] execute took {elapsed:.1f}s")
 
-    assert exec_resp.status_code == 200, (
-        f"Task execution failed ({exec_resp.status_code}): {exec_resp.text}"
-    )
+    assert (
+        exec_resp.status_code == 200
+    ), f"Task execution failed ({exec_resp.status_code}): {exec_resp.text}"
     return exec_resp.json()
 
 
@@ -250,9 +263,9 @@ def test_full_pipeline_exercises_all_three_agents():
     assert "score" in evaluation
     assert evaluation["score"] is None or 0 <= evaluation["score"] <= 10
     for key in ("strengths", "weaknesses", "recommendations"):
-        assert isinstance(evaluation.get(key), list), (
-            f"evaluation.{key} should be a list -- got {type(evaluation.get(key))}"
-        )
+        assert isinstance(
+            evaluation.get(key), list
+        ), f"evaluation.{key} should be a list -- got {type(evaluation.get(key))}"
 
     print(f"Score: {evaluation['score']}")
     print(f"Strengths: {evaluation['strengths']}")
@@ -268,7 +281,9 @@ def test_invalid_task_type_is_rejected():
     # InvalidTaskInputError isn't caught separately in routes.py's
     # create_task -- it falls into the generic `except Exception` and
     # returns 500, not 400/422. Documenting the CURRENT behavior here,
-    # not necessarily the ideal behavior -- worth revisiting.
+    # not necessarily the ideal behavior -- worth revisiting: a 4xx would
+    # be more correct REST semantics for client-side input validation
+    # failures. Flagged again in docs/DAY21_23_INTEGRATION_GUIDE.md.
     assert resp.status_code == 500
 
 
@@ -285,6 +300,6 @@ def test_full_pipeline_evaluation_lists_are_clean_phrases():
     evaluation = body["result"]["evaluation"]
     for key in ("strengths", "weaknesses", "recommendations"):
         for item in evaluation[key]:
-            assert not item.lower().startswith("and "), (
-                f"evaluation.{key} item still has a leading 'and ': {item!r}"
-            )
+            assert not item.lower().startswith(
+                "and "
+            ), f"evaluation.{key} item still has a leading 'and ': {item!r}"

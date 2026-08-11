@@ -2,6 +2,7 @@ import re
 
 from agents.base import Agent, AgentConfig  # noqa: F401
 from infrastructure.logging import logger
+from infrastructure.stall_watchdog import track_call
 
 
 class CriticAgent(Agent):
@@ -60,11 +61,12 @@ not sentences, and do not join the last two items with "and"."""
 
         prompt = self.build_prompt(input_data, summary=summary, extraction=extraction, **kwargs)
 
-        response = self.llm.generate(
-            prompt,
-            max_tokens=self.config.max_tokens,
-            temperature=0.5,
-        )
+        with track_call(agent_name="critic"):  # <- only new line
+            response = self.llm.generate(
+                prompt,
+                max_tokens=self.config.max_tokens,
+                temperature=0.5,
+            )
 
         raw_text = response.strip()
         parsed = self._parse_evaluation(raw_text)

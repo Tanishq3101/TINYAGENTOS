@@ -6,12 +6,13 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
-from datetime import datetime
 
 from api.routes import router
 from api.middleware import LoggingMiddleware
 from infrastructure.config import get_settings
 from infrastructure.logging import logger
+from infrastructure.error_tracking import ErrorTracker
+from infrastructure.stall_watchdog import configure_default_watchdog
 
 # ========================================
 # Lifespan Management
@@ -23,6 +24,21 @@ async def lifespan(app: FastAPI):
     """Application lifespan management."""
     # Startup
     logger.info("TinyAgentOS starting up")
+
+    # DAY 20: wire the stall watchdog to a real ErrorTracker before
+    # anything can call generate(). Placed ahead of the
+    # core.orchestrator import below on purpose -- that import
+    # constructs the agents, and while model *loading* isn't itself
+    # tracked (only generate() calls are, via each agent's
+    # track_call() wrapper), this keeps a single obvious startup
+    # ordering: monitoring armed first, then the components it watches.
+    error_tracker = ErrorTracker()
+    watchdog = configure_default_watchdog(
+        error_tracker=error_tracker,
+        stall_threshold_seconds=settings.STALL_THRESHOLD_SECONDS,
+        check_interval_seconds=settings.STALL_WATCHDOG_INTERVAL_SECONDS,
+    )
+    app.state.error_tracker = error_tracker
 
     # Forces core.orchestrator's module-level import to run now, at boot,
     # rather than lazily on the first request that calls get_orchestrator()
@@ -36,6 +52,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    watchdog.stop()
     logger.info("TinyAgentOS shutting down")
 
 

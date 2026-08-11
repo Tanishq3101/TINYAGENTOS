@@ -1,0 +1,55 @@
+# k8s/service.yaml
+#
+# ClusterIP by default -- internal-only. Nothing here assumes you have
+# an ingress controller or cloud load balancer set up, since that
+# wasn't specified. Two commented alternatives below if/when you decide
+# how this should actually be reached from outside the cluster.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: tinyagentos
+  labels:
+    app: tinyagentos
+spec:
+  type: ClusterIP
+  selector:
+    app: tinyagentos
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+      protocol: TCP
+
+# --- Alternative: expose directly via cloud load balancer -----------
+# spec:
+#   type: LoadBalancer
+#   selector:
+#     app: tinyagentos
+#   ports:
+#     - name: http
+#       port: 80
+#       targetPort: 8000
+
+# --- Alternative: route through an existing ingress controller ------
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: tinyagentos
+#   annotations:
+#     # e.g. cert-manager.io/cluster-issuer: letsencrypt-prod
+# spec:
+#   rules:
+#     - host: tinyagentos.example.com   # replace with your real domain
+#       http:
+#         paths:
+#           - path: /
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: tinyagentos
+#                 port:
+#                   number: 80
+#   tls:
+#     - hosts: [tinyagentos.example.com]
+#       secretName: tinyagentos-tls

@@ -1,7 +1,27 @@
 name: Deploy
 
-# Foundation only — actual build/push/deploy steps are wired up in Week 4
-# once docker/ and k8s/ manifests exist. Triggered manually or on version tags.
+# Build/push/deploy steps filled in now that docker/Dockerfile and
+# k8s/deployment.yaml + k8s/service.yaml exist (previously a Week 4
+# placeholder). Triggered manually or on version tags, same as before.
+#
+# CONFIRMED, NOT GUESSED
+# -----------------------
+# - docker/Dockerfile path and its non-root/healthcheck conventions:
+#   already reviewed directly.
+# - k8s/deployment.yaml / k8s/service.yaml: already reviewed directly
+#   (built in this same session).
+#
+# ASSUMPTIONS -- VERIFY BEFORE RELYING ON THIS
+# ---------------------------------------------
+# - Registry: ghcr.io (GitHub Container Registry), chosen because it
+#   authenticates with the automatically-provided GITHUB_TOKEN -- no
+#   separate Docker Hub account/secret needed. Swap the login step and
+#   image name if you'd rather use Docker Hub or another registry.
+# - `deploy` job assumes a `KUBE_CONFIG` secret (base64-encoded
+#   kubeconfig for your real cluster) does NOT yet exist -- it's left as
+#   an explicit placeholder rather than guessing cluster credentials
+#   that were never confirmed. Add that secret once you have a real
+#   target cluster, then remove the "placeholder" echo step.
 
 on:
   push:
@@ -9,23 +29,106 @@ on:
       - "v*.*.*"
   workflow_dispatch:
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-tag: ${{ steps.meta.outputs.tags }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Placeholder — build step
-        run: |
-          echo "Docker build will be added in Week 4 once docker/Dockerfile exists."
-          echo "Planned: docker build -t tinyagentos:${{ github.ref_name }} -f docker/Dockerfile ."
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ github.ref_name }}
+            type=semver,pattern={{version}}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'  # report, don't block -- flip to '1' once triaged
+
+      - name: Upload Trivy scan results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Placeholder — deploy step
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Requires a KUBE_CONFIG repo secret (base64-encoded kubeconfig)
+      # pointing at a real cluster -- not yet set up as of this workflow
+      # version. Remove this guard once that secret exists.
+      - name: Check for cluster credentials
         run: |
-          echo "Deployment (Docker registry push / kubectl apply) will be added in Week 4."
+          if [ -z "${{ secrets.KUBE_CONFIG }}" ]; then
+            echo "::warning::KUBE_CONFIG secret not set -- skipping real deploy. Add it in Settings > Secrets > Actions once a real cluster exists."
+            echo "SKIP_DEPLOY=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Set up kubectl
+        if: env.SKIP_DEPLOY != 'true'
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure cluster access
+        if: env.SKIP_DEPLOY != 'true'
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > "$HOME/.kube/config"
+
+      - name: Point manifest at the image just built
+        if: env.SKIP_DEPLOY != 'true'
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}"
+          sed -i "s|IMAGE_PLACEHOLDER|$IMAGE|" k8s/deployment.yaml
+
+      - name: Apply manifests
+        if: env.SKIP_DEPLOY != 'true'
+        run: |
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/service.yaml
+          kubectl rollout status deployment/tinyagentos --timeout=180s

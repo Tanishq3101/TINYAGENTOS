@@ -1,5 +1,25 @@
 name: Security
 
+# CONSOLIDATED onto scripts/security_scan.sh rather than re-implementing
+# bandit inline here -- the script is the more complete implementation
+# (bandit + safety + OWASP dependency-check, with graceful degradation
+# if a tool isn't installed) and was previously NOT being called by
+# this workflow at all, meaning CI was running a thinner duplicate of
+# it. Same category of problem SECURITY.md already flags for
+# verify_api_key()'s two implementations: fix the gap by making the
+# better one the one that's actually wired in, not by maintaining both.
+#
+# `pip install safety` is added below specifically so the script's
+# safety step actually executes in CI instead of hitting its own
+# graceful "not found, skipping" branch -- locally that branch is a
+# reasonable fallback; in CI there's no reason not to just have it.
+#
+# OWASP dependency-check runs via the official GitHub Action instead of
+# the script's Java-CLI branch, which is more idiomatic for Actions and
+# avoids scripting a Java install -- the script's own OWASP branch will
+# still correctly skip itself in this environment since the CLI won't
+# be on PATH, and this job supplies that coverage separately instead.
+
 on:
   push:
     branches: [main]
@@ -10,7 +30,7 @@ on:
     - cron: "0 6 * * 1"
 
 jobs:
-  bandit:
+  security-scan:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -23,16 +43,41 @@ jobs:
           activate-environment: tinyagentos
           python-version: "3.11"
 
-      - name: Run Bandit (static security analysis)
+      - name: Install safety
         shell: bash -l {0}
-        run: bandit -r core agents infrastructure storage api -f json -o bandit-report.json
+        run: pip install safety
 
-      - name: Upload Bandit report
+      - name: Run security_scan.sh (bandit + safety)
+        shell: bash -l {0}
+        run: bash scripts/security_scan.sh
+
+      - name: Upload scan reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: bandit-report
-          path: bandit-report.json
+          name: security-reports
+          path: security-reports/
+          if-no-files-found: warn
+
+  owasp-dependency-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: OWASP Dependency-Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: "TinyAgentOS"
+          path: "."
+          format: "JSON"
+
+      - name: Upload OWASP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: owasp-dependency-check-report
+          path: reports/
 
   dependency-review:
     runs-on: ubuntu-latest

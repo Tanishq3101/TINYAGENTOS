@@ -1,0 +1,23 @@
+# .env.test.example
+#
+# Template for local test/dev API key storage. Copy this to `.env.test`
+# (already gitignored -- see .gitignore.additions) and fill in a real
+# key issued via:
+#
+#     python -m scripts.manage_api_keys issue --label "local-test"
+#
+# `.env.test` itself is NEVER committed -- only this template is.
+# tests/integration/test_deployment_smoke.py and tests/e2e/test_complete_flow.py
+# both read TINYAGENTOS_TEST_API_KEY from the environment (falling back
+# to the CI/Docker-seeded "sk-test" default if unset), so loading this
+# file before running pytest locally is enough:
+#
+#     # bash / Git Bash
+#     export $(grep -v '^#' .env.test | xargs)
+#     pytest tests/e2e/test_complete_flow.py -v
+#
+#     # or with python-dotenv in a conftest.py:
+#     #   from dotenv import load_dotenv
+#     #   load_dotenv(".env.test")
+
+TINYAGENTOS_TEST_API_KEY=sk-PASTE-YOUR-ISSUED-KEY-HERE

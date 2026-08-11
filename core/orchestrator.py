@@ -55,10 +55,10 @@ import hashlib
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from core.pipeline import StepExecutionError  # re-used exception type
@@ -793,29 +793,31 @@ def _build_default_orchestrator() -> "Orchestrator":
     from agents.critic import CriticAgent
 
     llm = LLMRuntime()
-    return Orchestrator(agents={
-        "summarizer": SummarizerAgent(
-            AgentConfig(
-                name="summarizer",
-                description="Condenses input text into a concise summary",
+    return Orchestrator(
+        agents={
+            "summarizer": SummarizerAgent(
+                AgentConfig(
+                    name="summarizer",
+                    description="Condenses input text into a concise summary",
+                ),
+                llm,
             ),
-            llm,
-        ),
-        "extractor": ExtractorAgent(
-            AgentConfig(
-                name="extractor",
-                description="Extracts key points, entities, sentiment, and topics",
+            "extractor": ExtractorAgent(
+                AgentConfig(
+                    name="extractor",
+                    description="Extracts key points, entities, sentiment, and topics",
+                ),
+                llm,
             ),
-            llm,
-        ),
-        "critic": CriticAgent(
-            AgentConfig(
-                name="critic",
-                description="Evaluates summary + extraction quality against the original text",
+            "critic": CriticAgent(
+                AgentConfig(
+                    name="critic",
+                    description="Evaluates summary + extraction quality against the original text",
+                ),
+                llm,
             ),
-            llm,
-        ),
-    })
+        }
+    )
 
 
 def __getattr__(name: str) -> Any:

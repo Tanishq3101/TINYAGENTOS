@@ -105,9 +105,7 @@ class Database:
         substring or similar artifact of the lookup itself.
         """
         with self.session() as session:
-            api_key = (
-                session.query(ApiKeyModel).filter(ApiKeyModel.key_hash == key_hash).first()
-            )
+            api_key = session.query(ApiKeyModel).filter(ApiKeyModel.key_hash == key_hash).first()
             if api_key is not None:
                 session.expunge(api_key)
             return api_key

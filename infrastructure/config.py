@@ -81,6 +81,17 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./tinyagentos.db"
     LOG_LEVEL: str = "INFO"
 
+    # -------------------------
+    # Monitoring / Stall Watchdog (DAY 20)
+    # -------------------------
+    # Defaults match infrastructure/stall_watchdog.py's own hardcoded
+    # DEFAULT_STALL_THRESHOLD_SECONDS / DEFAULT_WATCHDOG_INTERVAL_SECONDS,
+    # so leaving these unset changes nothing. Override via .env once
+    # you've tuned them against real production latency, same as any
+    # other setting here.
+    STALL_THRESHOLD_SECONDS: float = 25.0
+    STALL_WATCHDOG_INTERVAL_SECONDS: float = 5.0
+
     @field_validator("SECRET_KEY")
     @classmethod
     def secret_key_must_be_strong(cls, v: str) -> str:

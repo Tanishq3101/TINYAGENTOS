@@ -1,7 +1,8 @@
 import sys
 
-sys.stdout.reconfigure(encoding="utf-8")
 from core.agent import BaseAgent
+
+sys.stdout.reconfigure(encoding="utf-8")
 
 
 def test_day5():

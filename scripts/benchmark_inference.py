@@ -332,9 +332,7 @@ def run_all_benchmarks(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Run TinyAgentOS real LLM inference benchmarks"
-    )
+    parser = argparse.ArgumentParser(description="Run TinyAgentOS real LLM inference benchmarks")
     parser.add_argument(
         "--calls", type=int, default=10, help="Calls per prompt size for latency benchmark"
     )

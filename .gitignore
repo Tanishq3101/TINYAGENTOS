@@ -124,3 +124,13 @@ tool/
 .github
 .git
 .gitignore
+
+
+
+# --- API keys / local secrets (Day 20-21 addition) ---
+.env
+.env.local
+.env.test
+.api-key
+
+.env.test.example

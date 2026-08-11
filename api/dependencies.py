@@ -116,9 +116,7 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)) -> str:
             detail="Authentication service temporarily unavailable",
         )
 
-    if api_key_row is None or not SecurityManager.verify_api_key(
-        x_api_key, api_key_row.key_hash
-    ):
+    if api_key_row is None or not SecurityManager.verify_api_key(x_api_key, api_key_row.key_hash):
         logger.warning("API key not recognized")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

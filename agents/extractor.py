@@ -3,6 +3,7 @@ import re
 
 from agents.base import Agent, AgentConfig  # noqa: F401
 from infrastructure.logging import logger
+from infrastructure.stall_watchdog import track_call
 
 # Safe default returned when the model fails to produce valid JSON,
 # so downstream consumers (e.g. CriticAgent, orchestrator) never have
@@ -42,11 +43,12 @@ Return ONLY valid JSON, no other text."""
     def _execute_task(self, input_data: str, **kwargs) -> str:
         prompt = self.build_prompt(input_data, **kwargs)
 
-        response = self.llm.generate(
-            prompt,
-            max_tokens=self.config.max_tokens,
-            temperature=0.3,  # lower temp for structured, deterministic output
-        )
+        with track_call(agent_name="extractor"):
+            response = self.llm.generate(
+                prompt,
+                max_tokens=self.config.max_tokens,
+                temperature=0.3,  # lower temp for structured, deterministic output
+            )
 
         text = response.strip()
 

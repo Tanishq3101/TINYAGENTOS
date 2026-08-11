@@ -42,9 +42,7 @@ class FakeRuntime:
         self.calls = []
 
     def generate(self, prompt, max_tokens=None, temperature=None):
-        self.calls.append(
-            {"prompt": prompt, "max_tokens": max_tokens, "temperature": temperature}
-        )
+        self.calls.append({"prompt": prompt, "max_tokens": max_tokens, "temperature": temperature})
         if self._delay:
             time.sleep(self._delay)
         return self._response
@@ -172,9 +170,7 @@ class TestLoadModelAndMeasure:
 # ---------------------------------------------------------------------------
 class TestBenchmarkLatencyByPromptSize:
     def test_one_result_per_prompt_size_with_correct_n(self, fake_runtime):
-        results = bi.benchmark_latency_by_prompt_size(
-            fake_runtime, calls_per_size=3, max_tokens=64
-        )
+        results = bi.benchmark_latency_by_prompt_size(fake_runtime, calls_per_size=3, max_tokens=64)
 
         assert set(results.keys()) == set(bi._PROMPTS.keys())
         for stats in results.values():
@@ -294,9 +290,12 @@ class TestMain:
             "sys.argv",
             [
                 "benchmark_inference.py",
-                "--calls", "1",
-                "--memory-calls", "1",
-                "--output", str(output_path),
+                "--calls",
+                "1",
+                "--memory-calls",
+                "1",
+                "--output",
+                str(output_path),
             ],
         )
 
@@ -346,7 +345,9 @@ class TestMain:
         monkeypatch.setattr(bi, "LLMRuntime", MagicMock(return_value=FakeRuntime()))
         monkeypatch.setattr(bi, "_PSUTIL_AVAILABLE", False)
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr("sys.argv", ["benchmark_inference.py", "--calls", "1", "--memory-calls", "1"])
+        monkeypatch.setattr(
+            "sys.argv", ["benchmark_inference.py", "--calls", "1", "--memory-calls", "1"]
+        )
 
         bi.main()
 

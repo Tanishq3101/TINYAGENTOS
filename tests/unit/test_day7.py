@@ -1,6 +1,5 @@
 # tests/test_agent_fix.py
 
-import pytest
 from core.agent import BaseAgent
 
 

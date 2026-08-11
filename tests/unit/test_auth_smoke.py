@@ -2,8 +2,6 @@
 
 import time
 
-import pytest
-
 # --- password hashing -----------------------------------------------------
 
 

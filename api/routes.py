@@ -33,7 +33,7 @@ from fastapi.concurrency import run_in_threadpool
 from datetime import datetime
 
 from api.dependencies import verify_api_key, get_orchestrator
-from api.schemas import TaskRequest, TaskResponse, ExecutionResult
+from api.schemas import TaskRequest, TaskResponse
 from core.orchestrator import Orchestrator
 from infrastructure.logging import logger
 

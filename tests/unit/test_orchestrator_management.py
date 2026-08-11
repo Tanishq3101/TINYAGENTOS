@@ -150,6 +150,12 @@ def test_get_metrics_summary_counts_by_status(orchestrator: Orchestrator) -> Non
     assert summary["total_tasks"] == 2
     assert summary["by_status"]["pending"] == 1
     assert summary["by_status"]["completed"] == 1
+    # The counts above could pass even if these two tasks got mixed up
+    # (e.g. both landed in "pending" and the completed one was never
+    # actually run) -- confirming each id's own status directly is what
+    # pending_id/completed_id are for, not just triggering a count.
+    assert orchestrator.get_task(pending_id)["status"] == TaskStatus.PENDING
+    assert orchestrator.get_task(completed_id)["status"] == TaskStatus.COMPLETED
 
 
 def test_get_metrics_summary_empty_orchestrator() -> None:

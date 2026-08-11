@@ -40,6 +40,7 @@ services:
     volumes:
       - ../logs:/app/logs
       - ../models:/app/models
+      - ../tinyagentos.db:/app/tinyagentos.db
     restart: unless-stopped
     networks:
       - tinyagentos-network

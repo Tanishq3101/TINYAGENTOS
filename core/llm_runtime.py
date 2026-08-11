@@ -31,7 +31,6 @@ this lock for the ~1 model call each takes, rather than crashing the
 interpreter.
 """
 
-import json
 import threading
 from typing import Optional
 from llama_cpp import Llama

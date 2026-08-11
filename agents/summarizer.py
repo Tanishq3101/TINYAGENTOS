@@ -1,4 +1,5 @@
 from agents.base import Agent, AgentConfig  # noqa: F401  (AgentConfig re-exported for convenience)
+from infrastructure.stall_watchdog import track_call
 
 
 class SummarizerAgent(Agent):
@@ -24,10 +25,11 @@ Provide ONLY the summary, no additional commentary."""
     def _execute_task(self, input_data: str, **kwargs) -> str:
         prompt = self.build_prompt(input_data, **kwargs)
 
-        response = self.llm.generate(
-            prompt,
-            max_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
-        )
+        with track_call(agent_name="summarizer"):
+            response = self.llm.generate(
+                prompt,
+                max_tokens=self.config.max_tokens,
+                temperature=self.config.temperature,
+            )
 
         return response.strip()
