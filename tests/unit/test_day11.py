@@ -94,11 +94,22 @@ def fake_orchestrator() -> FakeOrchestrator:
 
 @pytest.fixture()
 def client(fake_orchestrator: FakeOrchestrator):
+    import core.orchestrator as orchestrator_module
+
+    # api/app.py's lifespan does `from core.orchestrator import orchestrator`
+    # on startup, which triggers core/orchestrator.py's PEP 562 __getattr__
+    # and builds a real LLMRuntime() (real GGUF load) unless the singleton
+    # is already set. dependency_overrides only intercepts
+    # Depends(get_orchestrator) at request time, so it can't stop that
+    # startup-time import -- pre-seed the module global instead.
+    orchestrator_module._orchestrator_singleton = fake_orchestrator
+
     app.dependency_overrides[get_orchestrator] = lambda: fake_orchestrator
     app.dependency_overrides[verify_api_key] = lambda: "test-key"
     with TestClient(app, base_url="http://localhost") as c:
         yield c
     app.dependency_overrides.clear()
+    orchestrator_module._orchestrator_singleton = None
 
 
 def test_health_check_returns_200(client: TestClient) -> None:
@@ -206,8 +217,10 @@ def test_real_auth_dependency_rejects_missing_key_when_required(
     fake_orchestrator: FakeOrchestrator,
 ) -> None:
     from infrastructure.config import get_settings
+    import core.orchestrator as orchestrator_module
 
     settings = get_settings()
+    orchestrator_module._orchestrator_singleton = fake_orchestrator
     app.dependency_overrides[get_orchestrator] = lambda: fake_orchestrator
     try:
         with TestClient(app, base_url="http://localhost") as c:
@@ -218,3 +231,4 @@ def test_real_auth_dependency_rejects_missing_key_when_required(
                 assert resp.status_code != 401
     finally:
         app.dependency_overrides.clear()
+        orchestrator_module._orchestrator_singleton = None

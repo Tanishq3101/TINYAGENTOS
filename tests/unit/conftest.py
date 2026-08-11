@@ -57,6 +57,17 @@ def fake_orchestrator():
 def client(fake_orchestrator):
     """Provide test client with fake orchestrator."""
     from api.routes import get_orchestrator
+    import core.orchestrator as orchestrator_module
+
+    # api/app.py's lifespan does `from core.orchestrator import orchestrator`
+    # on startup, which triggers core/orchestrator.py's PEP 562 __getattr__.
+    # That only builds a real LLMRuntime() (which loads a real GGUF file)
+    # if _orchestrator_singleton is still unset. Pre-seed it with the fake
+    # here, before TestClient(app) runs the lifespan, so the real build
+    # never fires. dependency_overrides alone doesn't help here since it
+    # only intercepts Depends(get_orchestrator) at request time, not the
+    # direct module import that runs at startup.
+    orchestrator_module._orchestrator_singleton = fake_orchestrator
 
     app.dependency_overrides[get_orchestrator] = lambda: fake_orchestrator
 
@@ -64,3 +75,4 @@ def client(fake_orchestrator):
         yield client
 
     app.dependency_overrides.clear()
+    orchestrator_module._orchestrator_singleton = None

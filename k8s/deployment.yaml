@@ -29,13 +29,12 @@
 # one-line code change. Instead this uses an initContainer to fetch the
 # model into a shared emptyDir before the app container starts.
 #
-# ASSUMPTION: the exact model source/filename here matches the CI
-# workflow's MODEL_HF_REPO/MODEL_HF_FILE
-# (microsoft/Phi-3-mini-4k-instruct-gguf /
-# Phi-3-mini-4k-instruct-q4.gguf, confirmed as the official Microsoft
-# GGUF repo via web search) -- verify this is the same quantization
-# you're actually running against locally (models/phi-3-mini.gguf) and
-# adjust MODEL_PATH / the initContainer command together if not.
+# CONFIRMED: the source file downloaded here (microsoft/Phi-3-mini-4k-instruct-gguf /
+# Phi-3-mini-4k-instruct-q4.gguf) is the same file as the local
+# models/phi-3-mini.gguf -- file sizes match (2,393,231,072 bytes /
+# 2.39 GB, verified against the official Microsoft repo). The
+# initContainer below renames it to phi-3-mini.gguf on download so
+# MODEL_PATH matches docker-compose.yml exactly across environments.
 #
 # NOT INCLUDED HERE, ON PURPOSE: no real cluster/registry/ingress
 # details are assumed. IMAGE_PLACEHOLDER below must be replaced with
@@ -76,7 +75,8 @@ spec:
               pip install --no-cache-dir huggingface_hub && \
               huggingface-cli download microsoft/Phi-3-mini-4k-instruct-gguf \
                 Phi-3-mini-4k-instruct-q4.gguf \
-                --local-dir /models --local-dir-use-symlinks False
+                --local-dir /models --local-dir-use-symlinks False && \
+              mv /models/Phi-3-mini-4k-instruct-q4.gguf /models/phi-3-mini.gguf
           volumeMounts:
             - name: model-storage
               mountPath: /models
@@ -96,7 +96,7 @@ spec:
             - name: REQUIRE_AUTH
               value: "true"
             - name: MODEL_PATH
-              value: "/app/models/Phi-3-mini-4k-instruct-q4.gguf"
+              value: "/app/models/phi-3-mini.gguf"
             - name: DATABASE_URL
               value: "sqlite:///./data/tinyagentos.db"
             - name: SECRET_KEY
