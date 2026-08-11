@@ -35,13 +35,51 @@ jobs:
       - name: Type check (mypy)
         run: mypy .
 
+      - name: Start Docker Compose
+        env:
+          SECRET_KEY: "test-secret-key-not-for-production-use-only-in-ci-32chars-min"
+        run: |
+          docker compose up -d --build
+
+      - name: Show Docker Compose status
+        run: |
+          docker compose ps
+
+      - name: Show Docker logs if startup failed
+        if: failure()
+        run: |
+          docker compose logs --no-color
+
+      - name: Wait for API
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8000/api/v1/health; then
+              echo "API is ready"
+              exit 0
+            fi
+
+            echo "Waiting for API... ($i/60)"
+            sleep 2
+          done
+
+          echo "API failed to become ready"
+          docker compose ps
+          docker compose logs --no-color
+          exit 1
+
       - name: Run tests with coverage
         env:
           SECRET_KEY: "test-secret-key-not-for-production-use-only-in-ci-32chars-min"
-        run: pytest --cov=. --cov-report=xml --cov-report=term-missing
+        run: |
+          pytest --cov=. --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: coverage.xml
+
+      - name: Stop Docker Compose
+        if: always()
+        run: |
+          docker compose down -v
