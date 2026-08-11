@@ -6,7 +6,6 @@ Pytest configuration and fixtures.
 
 import pytest
 from fastapi.testclient import TestClient
-from core.orchestrator import Orchestrator
 from api.app import app
 
 
