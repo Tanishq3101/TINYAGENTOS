@@ -49,6 +49,21 @@ jobs:
       - name: Type check (mypy)
         run: mypy .
 
+      - name: Security scan (bandit)
+        run: |
+          # -ll = only fail the build on Medium or High severity findings.
+          # Low-severity findings (e.g. try/except/pass fallback patterns,
+          # the intentional unreachable `assert` in infrastructure/retry.py)
+          # are still reported in the JSON output below but do NOT fail CI.
+          bandit -r core/ agents/ infrastructure/ api/ -ll -f json -o bandit-report.json
+
+      - name: Upload bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
       - name: Ensure SQLite db file exists
         run: |
           # FIX: docker-compose.yml bind-mounts ../tinyagentos.db as a
