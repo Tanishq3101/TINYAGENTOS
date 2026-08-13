@@ -1,3 +1,37 @@
 python -m scripts.run_benchmarks
 python -m scripts.benchmark_inference --calls 30
 docker compose -f docker/docker-compose.yml --env-file .env up --build
+
+
+
+Useful variations
+
+Run in background (detached mode):
+
+bash
+docker compose -f docker/docker-compose.yml --env-file .env up --build -d
+
+Rebuild without cache (clean build):
+
+bash
+docker compose -f docker/docker-compose.yml --env-file .env build --no-cache
+docker compose -f docker/docker-compose.yml --env-file .env up
+
+Stop and remove what this brought up (matching down command):
+
+bash
+docker compose -f docker/docker-compose.yml --env-file .env down
+
+Bring it down and also remove volumes + images:
+
+bash
+docker compose -f docker/docker-compose.yml --env-file .env down -v --rmi all
+
+⚠️ One thing to double check: the .env path here is relative to wherever you run the command from — not relative to docker/docker-compose.yml. If your .env file actually lives inside the docker/ folder, you'd need:
+
+bash
+docker compose -f docker/docker-compose.yml --env-file docker/.env up --build
+
+Want me to help troubleshoot an error you're hitting with this command?
+
+
