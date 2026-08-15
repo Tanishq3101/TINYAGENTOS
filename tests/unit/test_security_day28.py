@@ -78,6 +78,7 @@ def client():
 # Rate limiting -- POST /api/v1/tasks
 # ---------------------------------------------------------------------------
 
+
 class TestRateLimiting:
     ENDPOINT = "/api/v1/tasks"
 
@@ -159,6 +160,7 @@ class TestRateLimiting:
 # ---------------------------------------------------------------------------
 # CORS narrowing -- GET /api/v1/health
 # ---------------------------------------------------------------------------
+
 
 class TestCORS:
     ENDPOINT = "/api/v1/health"
