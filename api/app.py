@@ -16,6 +16,7 @@ from infrastructure.config import get_settings
 from infrastructure.logging import logger
 from infrastructure.error_tracking import ErrorTracker
 from infrastructure.stall_watchdog import configure_default_watchdog
+from starlette.responses import Response
 
 # ========================================
 # Lifespan Management
@@ -87,7 +88,14 @@ app = FastAPI(
 # X-Forwarded-For-aware key_func to see the real client IP instead of
 # the proxy's.
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+async def _rate_limit_handler(request: Request, exc: Exception) -> Response:
+    assert isinstance(exc, RateLimitExceeded)
+    return _rate_limit_exceeded_handler(request, exc)
+
+
+app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
 
 # ========================================
 # Middleware

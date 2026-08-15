@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TinyAgentOS — Multi-agent AI that never leaves the edge</title>
+<meta name="description" content="A production-grade orchestration framework for local LLM workflows — quantized inference, agent pipelines, and full observability, with zero calls to a cloud API.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+
+<meta property="og:title" content="TinyAgentOS — Multi-agent AI that never leaves the edge">
+<meta property="og:description" content="A production-grade orchestration framework for local LLM workflows — quantized inference, agent pipelines, and full observability, with zero calls to a cloud API.">
+<meta property="og:type" content="website">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header>
+  <nav aria-label="Primary">
+    <a class="logo" href="index.html"><span class="dot" aria-hidden="true"></span>tinyagentos</a>
+    <ul class="navlinks">
+      <li><a href="docs.html">docs</a></li>
+      <li><a href="#benchmarks">benchmarks</a></li>
+      <li><a href="https://github.com/your-org/tinyagentos">github</a></li>
+    </ul>
+    <a class="btn" href="docs.html#getting-started">get started</a>
+  </nav>
+</header>
+
+<main id="main">
+
+  <section class="hero" aria-labelledby="hero-heading">
+    <div class="hero-copy">
+      <p class="eyebrow">RUNS ENTIRELY ON YOUR HARDWARE</p>
+      <h1 id="hero-heading">Multi-agent AI that never<br>leaves the <span class="accent">edge.</span></h1>
+      <p class="sub">A production-grade orchestration framework for local LLM workflows — quantized inference, agent pipelines, and full observability, with zero calls to a cloud API.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="docs.html#getting-started">deploy locally</a>
+        <a class="btn" href="docs.html">read the docs</a>
+      </div>
+      <div class="cmd-wrap">
+        <code class="cmd" id="cmd-text"><span class="prompt">$</span> docker compose -f docker/docker-compose.yml up --build</code>
+        <button class="copy-btn" id="copy-btn" type="button" aria-label="Copy command to clipboard">
+          <span class="copy-label">copy</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="scope" role="img" aria-label="Illustrative inference latency trace, not connected to a live instance">
+      <div class="scope-head">
+        <span>INFERENCE.TRACE</span>
+        <span class="live"><span class="live-label">DEMO</span></span>
+      </div>
+      <svg class="wave" id="wave-svg" viewBox="0 0 400 110" preserveAspectRatio="none" aria-hidden="true">
+        <line class="grid-line" x1="0" y1="27" x2="400" y2="27"/>
+        <line class="grid-line" x1="0" y1="55" x2="400" y2="55"/>
+        <line class="grid-line" x1="0" y1="83" x2="400" y2="83"/>
+        <path class="wave-line" id="wave-path"/>
+      </svg>
+      <div class="scope-stats">
+        <div class="stat"><div class="val">42ms</div><div class="lab">TOKEN LATENCY</div></div>
+        <div class="stat"><div class="val">0.55</div><div class="lab">TASKS / SEC</div></div>
+        <div class="stat"><div class="val">280MB</div><div class="lab">RESIDENT MEM</div></div>
+      </div>
+      <p class="scope-note">Illustrative values. See <a href="#benchmarks">measured benchmarks</a> below.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="arch-heading">
+    <div class="sec-head">
+      <p class="sec-tag">// ARCHITECTURE</p>
+      <h2 class="sec-title" id="arch-heading">Built for constrained hardware, not rented GPUs</h2>
+    </div>
+    <ul class="spec-grid">
+      <li class="spec-card">
+        <h3>Quantized runtime</h3>
+        <p>Phi-3 Mini GGUF, CPU-only by default. Context window and thread count tune to what your device actually has.</p>
+      </li>
+      <li class="spec-card">
+        <h3>Agent orchestration</h3>
+        <p>Summarizer, extractor, and critic agents run as a supervised pipeline with retry and fallback built in.</p>
+      </li>
+      <li class="spec-card">
+        <h3>Non-root by default</h3>
+        <p>Containers run as an unprivileged user. Every input is validated before it reaches the model.</p>
+      </li>
+      <li class="spec-card">
+        <h3>Structured everything</h3>
+        <p>JSON logs, metrics, and health checks out of the box — no bolted-on observability later.</p>
+      </li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="pipeline-heading">
+    <div class="sec-head">
+      <p class="sec-tag">// PIPELINE</p>
+      <h2 class="sec-title" id="pipeline-heading">One task, three agents, one process</h2>
+    </div>
+    <div class="pipeline" id="pipeline">
+      <div class="track" aria-hidden="true"></div>
+      <div class="pulse-dot" aria-hidden="true"></div>
+      <div class="pulse-dot" aria-hidden="true" style="animation-delay:1.75s;"></div>
+      <div class="node">Orchestrator<span class="tag">task intake</span></div>
+      <div class="node">Summarizer<span class="tag">agent</span></div>
+      <div class="node">Extractor<span class="tag">agent</span></div>
+      <div class="node">Critic<span class="tag">agent</span></div>
+      <div class="node">Response<span class="tag">API output</span></div>
+    </div>
+  </section>
+
+  <section id="benchmarks" aria-labelledby="bench-heading">
+    <div class="sec-head">
+      <p class="sec-tag">// BENCHMARKS</p>
+      <h2 class="sec-title" id="bench-heading">Measured, not marketed</h2>
+      <p class="sec-note">Placeholder figures — replace with real output from <code>scripts/run_benchmarks.py</code> before launch.</p>
+    </div>
+    <table class="bench">
+      <thead>
+        <tr>
+          <th scope="col">Metric</th>
+          <th scope="col">P50</th>
+          <th scope="col">P95</th>
+          <th scope="col">P99</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Task latency<div class="bar-wrap"><div class="bar" style="width:56%;"></div></div></td>
+          <td>1.8s</td><td>2.5s</td><td>3.2s</td>
+        </tr>
+        <tr>
+          <td>Model load<div class="bar-wrap"><div class="bar" style="width:20%;"></div></div></td>
+          <td>1.1s</td><td>1.3s</td><td>1.6s</td>
+        </tr>
+        <tr>
+          <td>Memory (idle)<div class="bar-wrap"><div class="bar" style="width:35%;"></div></div></td>
+          <td>260MB</td><td>290MB</td><td>310MB</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+</main>
+
+<footer>
+  <span>tinyagentos // phase 1</span>
+  <span><a href="https://github.com/your-org/tinyagentos">github</a> · <a href="docs.html">docs</a> · <a href="docs.html#deployment">security</a></span>
+</footer>
+
+<script src="main.js"></script>
+</body>
+</html>

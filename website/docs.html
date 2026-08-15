@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docs — TinyAgentOS</title>
+<meta name="description" content="Documentation for TinyAgentOS — setup, architecture, and API reference.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .docs-layout{
+    max-width:1180px;margin:0 auto;padding:48px 32px 96px;
+    display:grid;grid-template-columns:220px 1fr;gap:56px;align-items:start;
+  }
+  .docs-nav{
+    position:sticky;top:32px;
+    font-family:'IBM Plex Mono',monospace;font-size:13px;
+  }
+  .docs-nav h2{
+    font-size:11px;color:var(--text-dim);letter-spacing:0.08em;
+    margin-bottom:14px;font-weight:500;text-transform:uppercase;
+  }
+  .docs-nav ul{list-style:none;display:flex;flex-direction:column;gap:2px;}
+  .docs-nav a{
+    color:var(--text-dim);text-decoration:none;padding:6px 10px;
+    border-radius:2px;display:block;
+  }
+  .docs-nav a:hover{color:var(--text);background:var(--panel);}
+  .docs-nav a.active{color:var(--amber);background:var(--panel);}
+
+  .docs-content h1{
+    font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:32px;
+    margin-bottom:12px;
+  }
+  .docs-content .lede{color:var(--text-dim);font-size:15px;margin-bottom:40px;max-width:640px;line-height:1.6;}
+  .docs-section{margin-bottom:48px;scroll-margin-top:24px;}
+  .docs-section h2{
+    font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:600;
+    margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--line);
+  }
+  .docs-section p{color:var(--text-dim);line-height:1.7;margin-bottom:14px;max-width:680px;}
+  .docs-section pre{
+    background:var(--panel);border:1px solid var(--line);border-radius:4px;
+    padding:16px 18px;overflow-x:auto;margin-bottom:14px;
+  }
+  .docs-section code{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text);}
+  .docs-section p code{background:var(--panel);padding:2px 6px;border-radius:2px;}
+  .placeholder-note{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--cyan);
+    border:1px dashed var(--line);padding:14px 16px;border-radius:4px;
+    margin-bottom:14px;
+  }
+
+  @media(max-width:860px){
+    .docs-layout{grid-template-columns:1fr;padding:32px 20px 64px;gap:32px;}
+    .docs-nav{position:static;}
+  }
+</style>
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header>
+  <nav aria-label="Primary">
+    <a class="logo" href="index.html"><span class="dot" aria-hidden="true"></span>tinyagentos</a>
+    <ul class="navlinks">
+      <li><a href="docs.html" aria-current="page">docs</a></li>
+      <li><a href="index.html#benchmarks">benchmarks</a></li>
+      <li><a href="https://github.com/your-org/tinyagentos">github</a></li>
+    </ul>
+    <a class="btn" href="#getting-started">get started</a>
+  </nav>
+</header>
+
+<main id="main">
+  <div class="docs-layout">
+
+    <nav class="docs-nav" aria-label="Docs sections">
+      <h2>On this page</h2>
+      <ul>
+        <li><a href="#getting-started">Getting started</a></li>
+        <li><a href="#architecture">Architecture</a></li>
+        <li><a href="#agents">Agents</a></li>
+        <li><a href="#api">API reference</a></li>
+        <li><a href="#configuration">Configuration</a></li>
+        <li><a href="#deployment">Deployment</a></li>
+      </ul>
+    </nav>
+
+    <div class="docs-content">
+      <h1>Documentation</h1>
+      <p class="lede">Setup, architecture, and API reference for TinyAgentOS. Paste real content into each section below.</p>
+
+      <section class="docs-section" id="getting-started">
+        <h2>Getting started</h2>
+        <p class="placeholder-note">PLACEHOLDER — replace with real quickstart content.</p>
+        <p>Installation, prerequisites, and first run instructions go here.</p>
+        <pre><code>docker compose -f docker/docker-compose.yml up --build</code></pre>
+      </section>
+
+      <section class="docs-section" id="architecture">
+        <h2>Architecture</h2>
+        <p class="placeholder-note">PLACEHOLDER — replace with real architecture content.</p>
+        <p>Overview of the orchestrator, pipeline, and how tasks flow through the system.</p>
+      </section>
+
+      <section class="docs-section" id="agents">
+        <h2>Agents</h2>
+        <p class="placeholder-note">PLACEHOLDER — replace with real agent documentation.</p>
+        <p>Summarizer, extractor, and critic agent behavior and configuration.</p>
+      </section>
+
+      <section class="docs-section" id="api">
+        <h2>API reference</h2>
+        <p class="placeholder-note">PLACEHOLDER — replace with real API reference.</p>
+        <p>Endpoints, request/response schemas, authentication.</p>
+      </section>
+
+      <section class="docs-section" id="configuration">
+        <h2>Configuration</h2>
+        <p class="placeholder-note">PLACEHOLDER — replace with real configuration content.</p>
+        <p>Environment variables, model settings, resource tuning.</p>
+      </section>
+
+      <section class="docs-section" id="deployment">
+        <h2>Deployment</h2>
+        <p class="placeholder-note">PLACEHOLDER — replace with real deployment content.</p>
+        <p>Docker, Kubernetes, and production hardening notes.</p>
+      </section>
+    </div>
+
+  </div>
+</main>
+
+<footer>
+  <span>tinyagentos // phase 1</span>
+  <span><a href="https://github.com/your-org/tinyagentos">github</a> · <a href="docs.html">docs</a> · <a href="#deployment">security</a></span>
+</footer>
+
+</body>
+</html>
