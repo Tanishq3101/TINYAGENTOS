@@ -23,10 +23,6 @@ module-level collectors and resets the ones it touched afterward.
 
 from __future__ import annotations
 
-import os
-
-import pytest
-
 import infrastructure.prometheus_metrics as pm
 
 
@@ -43,23 +39,15 @@ def _gauge_value(gauge) -> float:
 # ---------------------------------------------------------------------------
 class TestTasksTotal:
     def test_increments_for_given_task_type_and_status(self):
-        before = _counter_value(
-            pm.TASKS_TOTAL, task_type="full_pipeline", status="completed"
-        )
+        before = _counter_value(pm.TASKS_TOTAL, task_type="full_pipeline", status="completed")
         pm.TASKS_TOTAL.labels(task_type="full_pipeline", status="completed").inc()
-        after = _counter_value(
-            pm.TASKS_TOTAL, task_type="full_pipeline", status="completed"
-        )
+        after = _counter_value(pm.TASKS_TOTAL, task_type="full_pipeline", status="completed")
         assert after == before + 1
 
     def test_completed_and_failed_are_independent_series(self):
         pm.TASKS_TOTAL.labels(task_type="unit_test_probe", status="completed").inc()
-        completed = _counter_value(
-            pm.TASKS_TOTAL, task_type="unit_test_probe", status="completed"
-        )
-        failed = _counter_value(
-            pm.TASKS_TOTAL, task_type="unit_test_probe", status="failed"
-        )
+        completed = _counter_value(pm.TASKS_TOTAL, task_type="unit_test_probe", status="completed")
+        failed = _counter_value(pm.TASKS_TOTAL, task_type="unit_test_probe", status="failed")
         assert completed >= 1
         assert failed == 0
 
@@ -158,9 +146,7 @@ class TestRenderMetrics:
             def __init__(self, registry):
                 called["registry"] = registry
 
-        monkeypatch.setattr(
-            pm.multiprocess, "MultiProcessCollector", FakeMultiProcessCollector
-        )
+        monkeypatch.setattr(pm.multiprocess, "MultiProcessCollector", FakeMultiProcessCollector)
 
         registry = pm._get_registry()
         assert registry is not pm.REGISTRY
