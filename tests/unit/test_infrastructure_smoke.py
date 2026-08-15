@@ -78,7 +78,7 @@ def test_request_signature_roundtrip():
     from infrastructure.security import SecurityManager
 
     print("\n[test_request_signature_roundtrip] building HMAC signature for request body...")
-    secret = "shared-secret"
+    secret = "shared-secret"  # nosec B105 - test fixture value, not a real credential
     body = '{"task": "summarize"}'
     sig = SecurityManager.verify_request_signature  # noqa: F841 (kept for readability)
 
