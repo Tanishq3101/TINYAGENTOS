@@ -56,6 +56,24 @@ class Settings(BaseSettings):
     REQUIRE_AUTH: bool = True
     API_KEY_HEADER: str = "X-API-Key"
 
+    # Separate from SECRET_KEY on purpose: SECRET_KEY signs JWTs,
+    # FERNET_KEY encrypts stored data (infrastructure/security.py's
+    # SecurityManager). Different purposes should never share a key —
+    # rotating one shouldn't force rotating the other. Optional here
+    # (None) because not every deployment encrypts data at rest yet;
+    # SecurityManager itself still refuses a missing/empty key at
+    # construction time if something actually tries to use it.
+    FERNET_KEY: str | None = None
+
+    # -------------------------
+    # Rate Limiting
+    # -------------------------
+    # Was declared in default.yaml (rate_limit_per_minute) but never
+    # exposed on Settings, so nothing in code could actually read it —
+    # app.py's slowapi Limiter and routes.py's @limiter.limit(...)
+    # decorators reference this field to enforce it.
+    RATE_LIMIT_PER_MINUTE: int = 60
+
     # -------------------------
     # API Server Configuration
     # -------------------------

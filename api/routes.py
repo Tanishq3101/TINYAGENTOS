@@ -28,15 +28,19 @@ Implements:
 - Authentication and validation
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
 from datetime import datetime
 
-from api.dependencies import verify_api_key, get_orchestrator
+from api.dependencies import verify_api_key, get_orchestrator, get_database
+from api.limiter import limiter
 from api.schemas import TaskRequest, TaskResponse
 from core.orchestrator import Orchestrator
 from core.llm_runtime import LLMRuntime, ModelNotLoadedError
+from infrastructure.config import get_settings
 from infrastructure.logging import logger
+from infrastructure.security import SecurityManager
+from storage.database import Database
 
 # ========================================
 # Dependency Functions
@@ -94,8 +98,10 @@ async def health_check() -> dict:
 
 
 @router.post("/tasks", response_model=TaskResponse)
+@limiter.limit(f"{get_settings().RATE_LIMIT_PER_MINUTE}/minute")
 async def create_task(
-    request: TaskRequest,  # ✅ PYDANTIC VALIDATION HAPPENS FIRST
+    request: Request,  # required by slowapi's @limiter.limit -- must be named "request"
+    task_request: TaskRequest,  # ✅ PYDANTIC VALIDATION HAPPENS FIRST
     api_key: str = Depends(verify_api_key),  # ✅ THEN auth is checked
     orchestrator: Orchestrator = Depends(get_orchestrator),
 ) -> TaskResponse:
@@ -103,7 +109,7 @@ async def create_task(
     Create a new task.
 
     Args:
-        request: Task creation request
+        task_request: Task creation request
         api_key: Verified API key
         orchestrator: Orchestrator instance
 
@@ -113,7 +119,7 @@ async def create_task(
     Raises:
         HTTPException: 400 if validation fails, 401 if auth fails
     """
-    logger.info(f"Creating task with text length: {len(request.text)}")
+    logger.info(f"Creating task with text length: {len(task_request.text)}")
 
     try:
         # PATCHED: offloaded to a worker thread so this doesn't block the
@@ -123,9 +129,9 @@ async def create_task(
         # another task's cleanup runs -- cheap insurance either way.
         task_id = await run_in_threadpool(
             orchestrator.create_task,
-            input_data=request.text,
-            task_type=request.task_type,
-            priority=request.priority,
+            input_data=task_request.text,
+            task_type=task_request.task_type,
+            priority=task_request.priority,
         )
 
         return TaskResponse(
@@ -143,7 +149,9 @@ async def create_task(
 
 
 @router.post("/tasks/{task_id}/execute")
+@limiter.limit(f"{get_settings().RATE_LIMIT_PER_MINUTE}/minute")
 async def execute_task(
+    request: Request,  # required by slowapi's @limiter.limit
     task_id: str,
     api_key: str = Depends(verify_api_key),
     orchestrator: Orchestrator = Depends(get_orchestrator),
@@ -218,7 +226,9 @@ async def execute_task(
 
 
 @router.get("/tasks/{task_id}", response_model=TaskResponse)
+@limiter.limit(f"{get_settings().RATE_LIMIT_PER_MINUTE}/minute")
 async def get_task_status(
+    request: Request,  # required by slowapi's @limiter.limit
     task_id: str,
     api_key: str = Depends(verify_api_key),
     orchestrator: Orchestrator = Depends(get_orchestrator),
@@ -269,3 +279,54 @@ async def get_task_status(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to get task status",
         )
+
+
+@router.post("/api-keys/rotate")
+@limiter.limit(f"{get_settings().RATE_LIMIT_PER_MINUTE}/minute")
+async def rotate_api_key(
+    request: Request,  # required by slowapi's @limiter.limit
+    api_key_id: str = Depends(verify_api_key),
+    db: Database = Depends(get_database),
+) -> dict:
+    """
+    Rotate the calling API key: issue a new key and revoke the one used
+    to authenticate this request.
+
+    Depends(verify_api_key) already resolves to the matched ApiKeyModel
+    row's id (never the raw key -- see api/dependencies.py), so no
+    re-hashing or re-lookup is needed here to know which row to revoke.
+
+    Returns:
+        dict: the new raw API key (shown exactly once -- store it now)
+        and its row id.
+
+    Raises:
+        HTTPException: 401 if auth fails (via verify_api_key), 503 if the
+        key store is unreachable.
+    """
+    if api_key_id == "no-auth":
+        # REQUIRE_AUTH is False -- there is no real key record to rotate.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="API key rotation is unavailable when REQUIRE_AUTH is disabled",
+        )
+
+    new_raw_key = SecurityManager.generate_api_key()
+    new_key_hash = SecurityManager.hash_api_key(new_raw_key)
+
+    try:
+        new_row = await run_in_threadpool(db.create_api_key, new_key_hash, label="rotated")
+        await run_in_threadpool(db.revoke_api_key, api_key_id)
+    except Exception as e:
+        logger.error(f"API key rotation failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to rotate API key",
+        )
+
+    logger.info(f"API key rotated: {api_key_id} -> {new_row.id}")
+    return {
+        "api_key": new_raw_key,
+        "key_id": new_row.id,
+        "message": "Store this key now -- it will not be shown again.",
+    }

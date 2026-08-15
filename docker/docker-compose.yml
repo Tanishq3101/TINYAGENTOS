@@ -39,6 +39,15 @@ services:
       - MODEL_PATH=/app/models/phi-3-mini.gguf
       - DATABASE_URL=sqlite:///./tinyagentos.db
       - SECRET_KEY=${SECRET_KEY}
+      # FIX: was missing entirely -- config.py's FERNET_KEY defaults to
+      # None when unset, and nothing in this file was passing it through
+      # from the host .env. That meant SecurityManager's encryption-at-
+      # rest path was silently inactive in any docker-compose deployment,
+      # even though the code for it exists and even though the Day 28
+      # checklist marks encryption at rest as done. Compose only injects
+      # env vars explicitly listed here -- a host .env value alone is not
+      # enough.
+      - FERNET_KEY=${FERNET_KEY}
       # CI SMOKE-TEST FIX: opt-in only -- unset in any real .env, this
       # defaults to "0" (real Llama() load, as always). CI sets it to
       # "1" explicitly (see ci.yml's "Start Docker Compose" step) so the

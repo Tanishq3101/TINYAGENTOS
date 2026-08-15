@@ -16,6 +16,9 @@ from typing import Iterator, List, Optional
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from infrastructure.config import get_settings
+from infrastructure.logging import logger
+from infrastructure.security import SecurityManager
 from storage.models import ApiKeyModel, Base, TaskModel
 
 
@@ -28,6 +31,50 @@ class Database:
             connect_args={"check_same_thread": False} if "sqlite" in database_url else {},
         )
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+        self._security: Optional[SecurityManager] = None
+        self._encryption_warned = False
+
+    def _get_security(self) -> Optional[SecurityManager]:
+        """Lazily build a SecurityManager from settings.FERNET_KEY.
+
+        Returns None (rather than raising) when FERNET_KEY isn't
+        configured -- FERNET_KEY is optional by design (config.py), so a
+        deployment that hasn't set one yet degrades to storing input_text
+        as plaintext instead of crashing on every task save. A warning is
+        logged once, not per-call, so this doesn't spam logs on every
+        single task.
+        """
+        if self._security is not None:
+            return self._security
+
+        fernet_key = get_settings().FERNET_KEY
+        if not fernet_key:
+            if not self._encryption_warned:
+                logger.warning(
+                    "FERNET_KEY not configured -- task input_text will be stored "
+                    "in plaintext. Set FERNET_KEY to enable encryption at rest."
+                )
+                self._encryption_warned = True
+            return None
+
+        self._security = SecurityManager(encryption_key=fernet_key)
+        return self._security
+
+    def _encrypt_input_text(self, value: str) -> str:
+        security = self._get_security()
+        return security.encrypt_sensitive_data(value) if security is not None else value
+
+    def _decrypt_input_text(self, value: str) -> str:
+        security = self._get_security()
+        if security is None:
+            return value
+        try:
+            return security.decrypt_sensitive_data(value)
+        except ValueError:
+            # Value was written before FERNET_KEY was configured (plaintext
+            # in the DB already) -- return as-is rather than raising, so
+            # enabling encryption doesn't break reads of pre-existing rows.
+            return value
 
     def init_db(self) -> None:
         """Create all tables. Safe to call repeatedly — no-op if they exist."""
@@ -53,7 +100,17 @@ class Database:
             session.close()
 
     def save_task_execution(self, task_data: dict) -> TaskModel:
-        """Save a task execution record."""
+        """Save a task execution record.
+
+        input_text is encrypted before storage if FERNET_KEY is
+        configured (see _get_security). task_data is not mutated --
+        a shallow copy is made so callers holding a reference to the
+        original dict never see the ciphertext.
+        """
+        task_data = dict(task_data)
+        if "input_text" in task_data and task_data["input_text"] is not None:
+            task_data["input_text"] = self._encrypt_input_text(task_data["input_text"])
+
         with self.session() as session:
             task = TaskModel(**task_data)
             session.add(task)
@@ -65,11 +122,15 @@ class Database:
             return task
 
     def get_task_by_id(self, task_id: str) -> Optional[TaskModel]:
-        """Retrieve a task by ID."""
+        """Retrieve a task by ID. input_text is decrypted transparently
+        before the detached object is returned, if FERNET_KEY is
+        configured -- callers never see ciphertext."""
         with self.session() as session:
             task = session.query(TaskModel).filter(TaskModel.id == task_id).first()
             if task is not None:
                 session.expunge(task)
+                if task.input_text is not None:
+                    task.input_text = self._decrypt_input_text(task.input_text)
             return task
 
     # ------------------------------------------------------------------

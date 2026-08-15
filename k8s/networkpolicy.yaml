@@ -1,0 +1,75 @@
+# k8s/networkpolicy.yaml
+#
+# Default-deny plus explicit allow rules for the tinyagentos pod.
+#
+# Without any NetworkPolicy, Kubernetes allows all pod-to-pod traffic by
+# default -- any other pod in the cluster (or, depending on your CNI, in
+# other namespaces) can reach tinyagentos on any port, and tinyagentos
+# can reach anything else. This closes that down to exactly what the app
+# actually needs, based on what's confirmed elsewhere in this repo:
+#   - deployment.yaml: container port 8000 (http), liveness/readiness
+#     probes hit this same port from within the cluster (kubelet, which
+#     NetworkPolicy does not restrict -- kubelet health checks bypass
+#     Pod network policy by design).
+#   - deployment.yaml's initContainer fetches the model from
+#     huggingface.co over HTTPS (443) before the app container starts.
+#   - The app talks to a local SQLite file (db-storage PVC), not a
+#     network database -- no egress rule needed for DB traffic.
+#
+# NOT INCLUDED, ON PURPOSE: no rule opens DNS (port 53) explicitly.
+# Most CNI plugins (Calico, Cilium) auto-allow DNS regardless of
+# NetworkPolicy, but this varies -- if pods start failing to resolve
+# huggingface.co or anything else after applying this, add an explicit
+# egress rule for UDP/TCP 53 to kube-dns/coredns in your cluster's
+# kube-system namespace.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tinyagentos-network-policy
+  labels:
+    app: tinyagentos
+spec:
+  podSelector:
+    matchLabels:
+      app: tinyagentos
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Allow inbound HTTP only from the tinyagentos Service itself (i.e.
+    # traffic routed through service.yaml's ClusterIP / any ingress
+    # controller sitting in front of it). Adjust the namespaceSelector /
+    # podSelector below to match your actual ingress controller's labels
+    # if you're using the commented Ingress option in service.yaml.
+    - from:
+        - podSelector: {}  # same-namespace pods only, by default scope
+      ports:
+        - protocol: TCP
+          port: 8000
+
+  egress:
+    # HTTPS out -- needed for the initContainer's huggingface_hub model
+    # download (see deployment.yaml). Left open to all external HTTPS
+    # rather than pinned to huggingface.co's specific IPs, since those
+    # are not stable/documented and pinning them would break silently on
+    # any CDN change.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+
+    # DNS -- see note above. Uncomment and adjust the namespaceSelector
+    # to your cluster's actual kube-system/coredns labels if pods lose
+    # DNS resolution after applying this policy.
+    # - to:
+    #     - namespaceSelector:
+    #         matchLabels:
+    #           kubernetes.io/metadata.name: kube-system
+    #   ports:
+    #     - protocol: UDP
+    #       port: 53
+    #     - protocol: TCP
+    #       port: 53

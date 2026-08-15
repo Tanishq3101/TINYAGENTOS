@@ -1,0 +1,118 @@
+# k8s/backup-cronjob.yaml
+#
+# Daily encrypted backup of tinyagentos.db to S3.
+#
+# ASSUMES, NOT CONFIRMED: same caveat as ingress.yaml -- this assumes an
+# S3 bucket already exists and the referenced Secrets are populated
+# out-of-band (never commit real values). Create them with, e.g.:
+#
+#   kubectl create secret generic tinyagentos-backup-secrets \
+#     --from-literal=gpg-passphrase="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')" \
+#     --from-literal=aws-access-key-id=AKIA... \
+#     --from-literal=aws-secret-access-key=...
+#
+# Prefer IRSA (IAM Roles for Service Accounts) over static AWS keys if
+# running on EKS -- swap the env-based AWS credentials below for a
+# serviceAccountName annotated with the appropriate IAM role instead.
+#
+# ACCESS MODE NOTE: db-storage in deployment.yaml is ReadWriteOnce.
+# Whether this Job's pod can mount it *concurrently* with the main
+# Deployment's pod depends on your storage class -- some CSI drivers
+# allow multiple same-node RWO mounts, many don't. If the backup Job
+# fails to schedule/mount while the app is running, either switch
+# db-storage to a ReadWriteMany-capable storage class, or point this at
+# a volume snapshot / replica instead of the live PVC directly.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: tinyagentos-db-backup
+  labels:
+    app: tinyagentos
+spec:
+  schedule: "0 3 * * *"  # daily at 03:00 UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+          containers:
+            - name: backup
+              image: amazon/aws-cli:2.15.0  # includes aws-cli; sqlite3 + gnupg installed below
+              command:
+                - sh
+                - -c
+                - |
+                  yum install -y sqlite gnupg2 >/dev/null && \
+                  sh /scripts/backup_db.sh
+              env:
+                - name: DATABASE_PATH
+                  value: "/app/data/tinyagentos.db"
+                - name: S3_BACKUP_BUCKET
+                  valueFrom:
+                    configMapKeyRef:
+                      name: tinyagentos-backup-config
+                      key: s3-bucket
+                - name: BACKUP_GPG_PASSPHRASE
+                  valueFrom:
+                    secretKeyRef:
+                      name: tinyagentos-backup-secrets
+                      key: gpg-passphrase
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: tinyagentos-backup-secrets
+                      key: aws-access-key-id
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: tinyagentos-backup-secrets
+                      key: aws-secret-access-key
+                - name: AWS_DEFAULT_REGION
+                  value: "us-east-1"  # adjust to your bucket's region
+              volumeMounts:
+                - name: db-storage
+                  mountPath: /app/data
+                  readOnly: true  # backup job never needs to write to the live DB
+                - name: backup-script
+                  mountPath: /scripts
+          volumes:
+            - name: db-storage
+              persistentVolumeClaim:
+                claimName: tinyagentos-db-pvc  # same PVC deployment.yaml uses
+            - name: backup-script
+              configMap:
+                name: tinyagentos-backup-script
+                defaultMode: 0755
+
+---
+# Not committed with a real value.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tinyagentos-backup-config
+data:
+  s3-bucket: REPLACE_ME_WITH_YOUR_BUCKET_NAME
+
+---
+# scripts/backup_db.sh's content, mounted into the Job -- keeps the
+# actual script in-repo (testable/runnable outside k8s too) rather than
+# duplicating it inline here. Regenerate this ConfigMap from the script
+# file whenever backup_db.sh changes, e.g.:
+#   kubectl create configmap tinyagentos-backup-script \
+#     --from-file=backup_db.sh=scripts/backup_db.sh \
+#     --dry-run=client -o yaml | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tinyagentos-backup-script
+data:
+  backup_db.sh: |
+    REPLACE_VIA_KUBECTL_COMMAND_ABOVE_DO_NOT_HAND_EDIT

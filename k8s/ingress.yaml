@@ -1,0 +1,57 @@
+# k8s/ingress.yaml
+#
+# TLS termination for tinyagentos.
+#
+# This was the one checklist item application code genuinely cannot
+# fix: "HTTPS enforced (TLS 1.3)" and "sensitive data encrypted in
+# transit" both require something terminating TLS in front of the app.
+# service.yaml's ClusterIP is plain HTTP by design (internal-only); this
+# Ingress is what actually puts TLS at the edge.
+#
+# ASSUMES, NOT CONFIRMED: an ingress controller (e.g. ingress-nginx) and
+# cert-manager are already installed in the cluster -- neither is
+# something application code can install or verify. If cert-manager
+# isn't present, either install it first or replace the cert-manager
+# annotation + tls.secretName below with a manually-provisioned TLS
+# Secret instead.
+#
+# REPLACE BEFORE APPLYING:
+#   - tinyagentos.example.com -> your real domain
+#   - letsencrypt-prod -> your actual ClusterIssuer name, if different
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tinyagentos
+  labels:
+    app: tinyagentos
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # Forces HTTP -> HTTPS redirect at the ingress controller. Remove or
+    # set to "false" only if you have a specific reason to serve plain
+    # HTTP alongside HTTPS (you shouldn't, given REQUIRE_AUTH sends an
+    # API key in a header on every request).
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # TLS 1.3 preference -- matches the "TLS 1.3" checklist item
+    # specifically, not just "HTTPS enforced" generically. ingress-nginx
+    # sits on top of the cluster's OpenSSL build; TLS 1.3 support depends
+    # on that, not on anything this manifest controls directly.
+    nginx.ingress.kubernetes.io/ssl-protocols: "TLSv1.3 TLSv1.2"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - tinyagentos.example.com
+      secretName: tinyagentos-tls  # cert-manager populates this automatically
+  rules:
+    - host: tinyagentos.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: tinyagentos
+                port:
+                  number: 80  # service.yaml's Service port, not the pod's 8000

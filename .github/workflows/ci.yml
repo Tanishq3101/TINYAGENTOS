@@ -64,6 +64,18 @@ jobs:
           name: bandit-report
           path: bandit-report.json
 
+      - name: Dependency vulnerability scan (pip-audit)
+        run: |
+          # Bandit above is SAST -- it checks code patterns, not known
+          # CVEs in pinned dependency versions. pip-audit checks
+          # requirements.txt's exact pins against the PyPI advisory
+          # database. Not using -ll here: unlike bandit's severity
+          # levels, a pip-audit finding means a specific pinned version
+          # has a *known, published* CVE -- there's no "low severity,
+          # ignore it" tier to carve out the way bandit has for
+          # stylistic findings, so any hit fails the build.
+          pip-audit -r requirements.txt --desc
+
       - name: Ensure SQLite db file exists
         run: |
           # FIX: docker-compose.yml bind-mounts ../tinyagentos.db as a

@@ -20,6 +20,7 @@ passlib[bcrypt]==1.7.4
 bcrypt==3.2.2
 python-jose[cryptography]==3.3.0
 cryptography==41.0.7
+slowapi==0.1.9
 
 # =========================
 # LLM (LOCAL)
@@ -55,5 +56,6 @@ isort==5.13.2
 flake8==6.1.0
 mypy==1.7.1
 bandit==1.7.5
+pip-audit==2.7.3
 pre-commit==3.5.0
 pbr==7.0.3

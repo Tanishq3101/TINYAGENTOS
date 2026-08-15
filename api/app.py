@@ -6,7 +6,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
+from api.limiter import limiter
 from api.routes import router
 from api.middleware import LoggingMiddleware
 from infrastructure.config import get_settings
@@ -70,16 +73,37 @@ app = FastAPI(
 )
 
 # ========================================
+# Rate Limiting
+# ========================================
+#
+# Config-only until now: default.yaml has always declared
+# rate_limit_per_minute: 60, but nothing enforced it. `limiter` is
+# imported from api/limiter.py -- the SAME instance api/routes.py's
+# @limiter.limit(...) decorators use -- rather than constructed here, so
+# enforcement and the exception handler below operate on one shared
+# counter instead of two disconnected Limiter objects. key_func=
+# get_remote_address limits per client IP; behind a reverse proxy/load
+# balancer, this needs ProxyHeadersMiddleware or an
+# X-Forwarded-For-aware key_func to see the real client IP instead of
+# the proxy's.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ========================================
 # Middleware
 # ========================================
 
 # CORS
+# NARROWED from allow_methods=["*"] / allow_headers=["*"]: this API only
+# ever needs GET/POST and two request headers, so wildcarding both was
+# more permissive than the app actually requires -- not a fix for a
+# missing feature, just tightening what was already here.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["X-API-Key", "Content-Type"],
 )
 
 # Logging
