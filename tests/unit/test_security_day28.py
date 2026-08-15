@@ -30,6 +30,7 @@ from fastapi.testclient import TestClient
 
 from api.app import app
 from api.dependencies import verify_api_key, get_orchestrator, get_database
+from api.limiter import limiter
 from infrastructure.config import get_settings
 
 settings = get_settings()
@@ -81,6 +82,31 @@ def client():
 
 class TestRateLimiting:
     ENDPOINT = "/api/v1/tasks"
+
+    @pytest.fixture(autouse=True)
+    def reset_rate_limiter(self):
+        """
+        api/limiter.py's `limiter` is a module-level singleton with
+        slowapi's default in-memory storage, imported once and shared
+        for the entire pytest process -- not just across tests in this
+        class, but across the whole session. get_remote_address always
+        resolves to the same fixed value for TestClient requests, so
+        ANY test anywhere in the suite that POSTs /api/v1/tasks through
+        the real app (e.g. tests/e2e/test_complete_flow.py,
+        tests/integration/test_deployment_smoke.py) shares this exact
+        bucket. Without resetting here, tests in this class inherit
+        whatever budget earlier tests/files already spent, making
+        "request N/60 succeeds" assertions depend on suite-wide
+        ordering instead of this test's own behavior.
+
+        Reset before AND after each test: before, so this test starts
+        from a clean budget regardless of what ran earlier in the
+        session; after, so this class doesn't leave a partially-spent
+        bucket behind for whatever runs next.
+        """
+        limiter.reset()
+        yield
+        limiter.reset()
 
     def test_requests_within_limit_succeed(self, client):
         limit = settings.RATE_LIMIT_PER_MINUTE
