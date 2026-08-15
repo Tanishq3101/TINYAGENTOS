@@ -95,7 +95,7 @@ class TinyAgentOSUser(HttpUser):
             "/api/v1/tasks",
             json={"text": text, "task_type": task_type, "priority": random.randint(1, 10)},
             headers=self.headers,
-            name="/api/v1/tasks [create]",
+            name=f"/api/v1/tasks [create] [{task_type}]",
             catch_response=True,
         ) as create_response:
             if create_response.status_code != 200:
@@ -115,7 +115,17 @@ class TinyAgentOSUser(HttpUser):
         with self.client.post(
             f"/api/v1/tasks/{task_id}/execute",
             headers=self.headers,
-            name="/api/v1/tasks/[id]/execute",
+            # PATCHED: was a single shared name across all three
+            # task_types, which meant locust's per-endpoint stats
+            # (Avg/Min/Max/Med) blended 1-generate()-call requests
+            # (summarize/extract) with 3-generate()-call requests
+            # (full_pipeline) into one row -- impossible to tell from
+            # the aggregated numbers whether a given percentile came
+            # from a cheap or expensive task. Splitting by task_type
+            # lets you compare each path's latency against its own
+            # expected cost (full_pipeline ~= 3x a single-agent call
+            # under WORKERS=1's serialized inference lock).
+            name=f"/api/v1/tasks/[id]/execute [{task_type}]",
             catch_response=True,
         ) as exec_response:
             if exec_response.status_code != 200:

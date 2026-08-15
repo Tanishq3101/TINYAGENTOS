@@ -1,0 +1,39 @@
+Copy the patched files into the project
+Make sure the updated api/routes.py and core/orchestrator.py from this conversation are saved into D:\tinyagentos\api\routes.py and D:\tinyagentos\core\orchestrator.py, overwriting the old versions. If you edited them elsewhere, copy/paste the full contents in now.
+2
+Rebuild the image (a restart alone won't pick up code changes)
+docker compose -f docker/docker-compose.yml --env-file .env up -d --build This forces Docker to rebuild the tinyagentos image with the new source before restarting the container. A plain 'up -d' or 'restart' would keep running the old code baked into the existing image.
+3
+Confirm it's healthy again
+docker compose -f docker/docker-compose.yml --env-file .env ps Wait for STATUS to show (healthy), same as before. Give it a few seconds after 'Up' appears — the healthcheck needs a moment to pass.
+4
+Re-run the same 2-user Locust baseline
+locust -f tests/load/loadtest.py --host=http://localhost:8000 --users 2 --spawn-rate 2 --run-time 2m --headless Check TINYAGENTOS_TEST_API_KEY is still set first (echo %TINYAGENTOS_TEST_API_KEY%). Same command as the run that originally exposed the bug — using it again is what makes this a real before/after comparison.
+5
+Watch specifically for GET /api/v1/health and POST /api/v1/tasks [create] latency while an execute is running
+In the previous run, these ballooned to 230-756ms while a full_pipeline execute was in flight. If the fix worked, they should now stay in the low tens of ms range throughout the whole run, even while execute latency itself is still high (that part is real inference cost, not the bug).
+Go ahead and run this, then share the Locust output — that'll tell us definitively whether the event-loop fix holds under real load.
+
+hoe tp deletre the old docker image completely commands so thar i can fre up spavce
+
+1
+Stop and remove the running containers first
+docker compose -f docker/docker-compose.yml --env-file .env down Stops and removes the containers (not just pauses them like 'stop'). Run this before deleting images, otherwise Docker will refuse to remove an image that's still in use by a running or stopped container.
+2
+List images to find the old one(s)
+docker images Look for the tinyagentos image (repository name is usually 'docker-tinyagentos' based on your earlier 'docker compose ps' output) and note the old IMAGE ID next to it — you'll likely see multiple versions stacking up from each --build you've run today.
+3
+Remove a specific old image
+docker rmi <IMAGE_ID> Removes one specific image by its ID from the list above. Use -f to force if Docker complains it's still referenced somewhere: docker rmi -f <IMAGE_ID>. Repeat for each stale ID you want gone.
+4
+Or, remove every unused image at once (recommended here)
+docker image prune -a Removes ALL images not currently used by any container, in one shot — much faster than deleting one by one if you've accumulated several stale builds. It'll ask for confirmation (y/N) since this is broad; type y to proceed. This also clears dangling layers left over from repeated --build runs.
+5
+Check what's actually taking up space, and clear build cache too if needed
+docker system df Shows disk usage broken down by images, containers, volumes, and build cache — useful to see exactly what's eating space before/after cleanup. If build cache itself is large: docker builder prune — clears cached build layers (safe; just means your NEXT --build takes slightly longer since it can't reuse cached layers). When you're ready to bring the stack back up on the freshly rebuilt image: docker compose -f docker/docker-compose.yml --env-file .env up -d --build
+Given you're about to rebuild with the patched routes.py/orchestrator.py anyway, the practical order is: down → docker image prune -a → up -d --build. That clears every stale image from today's repeated builds in one step and leaves you with just the fresh one. Once you've rebuilt, you're ready to run that 2-user Locust baseline we set up to confirm the fix.
+
+
+
+
+docker compose -f docker/docker-compose.yml --env-file .env up -d --build

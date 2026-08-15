@@ -1,82 +1,29 @@
 """
 tests/unit/test_monitoring.py
 
-Tests for infrastructure/monitoring.py (Day 20).
+Tests for infrastructure/monitoring.py (Day 20, post-trim).
 
-Scope: metric wiring and the non-Prometheus helper logic
-(track_task_execution's status/duration bookkeeping, record_llm_call,
-sample_memory_usage). Does NOT assert on Prometheus's own internals
-(bucket math, exposition format) -- that's the library's job, not
-ours. Runs correctly whether or not prometheus_client is actually
-installed, mirroring the psutil-optional pattern in
-tests/test_benchmark_inference.py.
+Scope: the module now exposes exactly one live collector
+(llm_call_latency) and one function (record_llm_call). The old
+task_counter / active_tasks / pipeline_latency / memory_usage /
+track_task_execution() / sample_memory_usage() surface was removed
+from monitoring.py (see its module docstring) because nothing ever
+called it and it duplicated infrastructure/prometheus_metrics.py's
+real, live collectors (TASKS_TOTAL, ACTIVE_TASKS,
+TASK_DURATION_SECONDS, AGENT_STEP_DURATION_SECONDS). Those names are
+intentionally NOT tested here anymore -- coverage for them belongs to
+prometheus_metrics.py / test_prometheus_metrics.py, not this file.
+
+Runs correctly whether or not prometheus_client is actually installed
+(monitoring.py falls back to a _NoOpMetric), mirroring the
+psutil-optional pattern used elsewhere in this project.
 """
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 import infrastructure.monitoring as monitoring
-
-
-# ---------------------------------------------------------------------------
-# track_task_execution
-# ---------------------------------------------------------------------------
-class TestTrackTaskExecution:
-    def test_success_increments_success_counter(self, monkeypatch):
-        calls = []
-        fake_counter = MagicMock()
-        fake_counter.labels.side_effect = lambda **kw: calls.append(kw) or fake_counter
-        monkeypatch.setattr(monitoring, "task_counter", fake_counter)
-        monkeypatch.setattr(monitoring, "active_tasks", MagicMock())
-        monkeypatch.setattr(monitoring, "pipeline_latency", MagicMock())
-
-        with monitoring.track_task_execution("task-1"):
-            pass
-
-        assert calls == [{"status": "success"}]
-        fake_counter.inc.assert_called_once()
-
-    def test_exception_increments_error_counter_and_reraises(self, monkeypatch):
-        calls = []
-        fake_counter = MagicMock()
-        fake_counter.labels.side_effect = lambda **kw: calls.append(kw) or fake_counter
-        monkeypatch.setattr(monitoring, "task_counter", fake_counter)
-        monkeypatch.setattr(monitoring, "active_tasks", MagicMock())
-        monkeypatch.setattr(monitoring, "pipeline_latency", MagicMock())
-
-        with pytest.raises(ValueError):
-            with monitoring.track_task_execution("task-1"):
-                raise ValueError("boom")
-
-        assert calls == [{"status": "error"}]
-
-    def test_active_tasks_incremented_then_decremented(self, monkeypatch):
-        fake_gauge = MagicMock()
-        monkeypatch.setattr(monitoring, "active_tasks", fake_gauge)
-        monkeypatch.setattr(monitoring, "task_counter", MagicMock())
-        monkeypatch.setattr(monitoring, "pipeline_latency", MagicMock())
-
-        with monitoring.track_task_execution("task-1"):
-            fake_gauge.inc.assert_called_once()
-            fake_gauge.dec.assert_not_called()
-
-        fake_gauge.dec.assert_called_once()
-
-    def test_pipeline_latency_observed_with_nonnegative_duration(self, monkeypatch):
-        fake_hist = MagicMock()
-        monkeypatch.setattr(monitoring, "pipeline_latency", fake_hist)
-        monkeypatch.setattr(monitoring, "active_tasks", MagicMock())
-        monkeypatch.setattr(monitoring, "task_counter", MagicMock())
-
-        with monitoring.track_task_execution("task-1"):
-            pass
-
-        assert fake_hist.observe.call_count == 1
-        (duration,), _ = fake_hist.observe.call_args
-        assert duration >= 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -92,42 +39,14 @@ class TestRecordLlmCall:
         fake_hist.labels.assert_called_once_with(agent_name="summarizer")
         fake_hist.labels.return_value.observe.assert_called_once_with(1.23)
 
+    def test_observes_duration_unchanged(self, monkeypatch):
+        fake_hist = MagicMock()
+        monkeypatch.setattr(monitoring, "llm_call_latency", fake_hist)
 
-# ---------------------------------------------------------------------------
-# sample_memory_usage
-# ---------------------------------------------------------------------------
-class TestSampleMemoryUsage:
-    def test_returns_none_when_psutil_missing(self, monkeypatch):
-        import builtins
+        monitoring.record_llm_call("extractor", 42.0)
 
-        real_import = builtins.__import__
-
-        def fake_import(name, *args, **kwargs):
-            if name == "psutil":
-                raise ImportError("no psutil")
-            return real_import(name, *args, **kwargs)
-
-        monkeypatch.setattr(builtins, "__import__", fake_import)
-
-        assert monitoring.sample_memory_usage() is None
-
-    def test_sets_gauge_and_returns_value_when_psutil_available(self, monkeypatch):
-        fake_gauge = MagicMock()
-        monkeypatch.setattr(monitoring, "memory_usage", fake_gauge)
-
-        fake_process = MagicMock()
-        fake_process.memory_info.return_value.rss = 200 * 1024 * 1024
-        fake_psutil_module = MagicMock()
-        fake_psutil_module.Process.return_value = fake_process
-
-        import sys
-
-        monkeypatch.setitem(sys.modules, "psutil", fake_psutil_module)
-
-        result = monitoring.sample_memory_usage()
-
-        assert result == pytest.approx(200.0)
-        fake_gauge.set.assert_called_once_with(pytest.approx(200.0))
+        fake_hist.labels.assert_called_once_with(agent_name="extractor")
+        fake_hist.labels.return_value.observe.assert_called_once_with(42.0)
 
 
 # ---------------------------------------------------------------------------

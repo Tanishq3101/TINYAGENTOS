@@ -33,6 +33,29 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
+# `-e .` on requirements.txt's line 14 (see requirements.txt's own
+# comment) needs pyproject.toml AND the actual package directories it
+# points to (core/, agents/, infrastructure/, storage/, api/ -- see
+# pyproject.toml's [tool.setuptools.packages.find]) present on disk to
+# resolve -- an editable install still requires setuptools to discover
+# the packages at install time, it just skips copying them into
+# site-packages afterward. Copying the whole source tree here (rather
+# than just requirements.txt, as before) is what was missing -- this
+# stage previously tried to `pip install -e .` against a directory
+# containing only requirements.txt, which correctly failed with
+# "does not appear to be a Python project."
+#
+# Trade-off: this now busts the pip-install Docker layer cache on ANY
+# source file change, not just requirements.txt/pyproject.toml changes
+# -- every rebuild reinstalls all dependencies, including the slow
+# from-source llama-cpp-python compile. If build time becomes painful,
+# the fix is copying pyproject.toml + just the package directories
+# (core/ agents/ infrastructure/ storage/ api/) here instead of the
+# whole tree, so requirements.txt/pyproject.toml changes stay
+# cache-friendly while a change to, say, tests/ doesn't force a
+# reinstall. Not done here to keep this fix minimal and obviously
+# correct first.
+COPY . .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ---- Stage 2: Runtime ----

@@ -37,7 +37,7 @@ from starlette.responses import Response
 from api.dependencies import verify_api_key, get_orchestrator, get_database
 from api.limiter import limiter
 from api.schemas import TaskRequest, TaskResponse
-from core.orchestrator import Orchestrator
+from core.orchestrator import Orchestrator, OrchestratorBusyError
 from core.llm_runtime import LLMRuntime, ModelNotLoadedError
 from infrastructure.config import get_settings
 from infrastructure.logging import logger
@@ -196,7 +196,9 @@ async def execute_task(
         dict: Execution results
 
     Raises:
-        HTTPException: 404 if task not found, 409 if already running
+        HTTPException: 404 if task not found, 409 if already running,
+            503 if the model isn't loaded or the orchestrator is at its
+            concurrent-execution capacity (see OrchestratorBusyError)
     """
     logger.info(f"Executing task: {task_id}")
 
@@ -243,6 +245,26 @@ async def execute_task(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
+        )
+
+    # PATCHED: bounded-admission-control fix. Previously there was no
+    # cap anywhere on concurrent execute_pipeline() calls, so requests
+    # beyond what the single-worker LLMRuntime could actually serve just
+    # queued invisibly behind its inference lock -- sometimes for
+    # minutes, with no signal to the caller and no way to distinguish
+    # "slow" from "queued behind an earlier load test's backlog" (see
+    # the Day 21-23 load-test findings). Orchestrator now rejects
+    # immediately via OrchestratorBusyError once at capacity; this
+    # translates that into a fast, explicit 503 instead of blocking the
+    # request handler. Retry-After is a plain heuristic, not a measured
+    # queue-drain estimate -- callers doing real backoff should still
+    # use their own jitter/backoff strategy on top of it.
+    except OrchestratorBusyError as e:
+        logger.warning(f"Rejected execute request -- orchestrator at capacity: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+            headers={"Retry-After": "5"},
         )
 
     except Exception as e:

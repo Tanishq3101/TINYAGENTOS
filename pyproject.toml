@@ -51,6 +51,27 @@ python_files = ["test_*.py"]
 addopts = "-v --cov=. --cov-report=term-missing"
 asyncio_mode = "auto"
 pythonpath = ["."]
+# Registers the 'slow' marker (previously used in
+# tests/unit/test_security_day28.py and now also
+# tests/integration/test_deployment_smoke.py's real-inference tests
+# without ever being declared here, hence the long-standing
+# PytestUnknownMarkWarning on every run). Real-inference tests share
+# LLMRuntime's single _inference_lock (WORKERS=1) with every other
+# test in the same session -- run back-to-back with 280+ other tests,
+# they inherit whatever lock contention/backlog those left behind,
+# which is a real source of session-order-dependent flakiness (see the
+# 2026-08-15 flake: a Ctrl+C'd run left an orphaned generate() call
+# running server-side, and the next full run's full_pipeline tests
+# queued up behind it and hit their timeout).
+#
+# Default CI/dev loop: `pytest -m "not slow"` -- fast, deterministic,
+# no real inference.
+# Separate pass against a freshly-started container:
+# `pytest -m slow` -- exercises real concurrent inference without
+# competing with 280 unrelated tests for the same lock.
+markers = [
+    "slow: real-inference / real-container tests; run separately from the main suite (pytest -m slow)",
+]
 
 [tool.bandit]
 exclude_dirs = ["tests", "venv", ".venv"]

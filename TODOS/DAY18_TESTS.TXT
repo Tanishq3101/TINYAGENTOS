@@ -35,3 +35,22 @@ docker compose -f docker/docker-compose.yml --env-file docker/.env up --build
 Want me to help troubleshoot an error you're hitting with this command?
 
 
+docker compose -f docker/docker-compose.yml --env-file .env up -d --build
+
+
+
+
+
+
+File	Command	Notes
+run_benchmarks.py	python scripts/run_benchmarks.py	Pure orchestration benchmark, uses FakeAgent — no real model needed. Flags: --iterations 100 --concurrency 16 --latency-ms 0 --output docs/benchmark_results.json
+benchmark_inference.py	python scripts/benchmark_inference.py	Needs llama-cpp-python actually compiled/installed and a real GGUF file at settings.MODEL_PATH — per its own docstring this can't run in a sandbox without those. Flags: --calls 20 --max-tokens 256 --output docs/inference_benchmark_results.json, or --skip-memory if psutil isn't installed.
+test_benchmarks.py	pytest tests/performance/test_benchmarks.py -v	Imports scripts.run_benchmarks, so it needs the repo root on sys.path — pyproject.toml's pythonpath = ["."] under [tool.pytest.ini_options] already handles that as long as you run pytest from repo root.
+test_complete_flow.py	pytest tests/e2e/test_complete_flow.py -v	In-process via FastAPI's TestClient — no Docker/live server needed, but it does exercise the real Orchestrator/LLMRuntime, so it's slow and needs the same GGUF model as above. Optional: export TINYAGENTOS_TEST_API_KEY=sk-<your-key> (defaults to "sk-test").
+test_deployment_smoke.py	1: docker compose -f docker/docker-compose.yml --env-file .env up --build, wait for docker inspect --format="{{.State.Health.Status}}" docker-tinyagentos-1 to say healthy, then 2: pytest tests/integration/test_deployment_smoke.py -v -s	-s matters — several tests print timing info you'll want to see. Needs a live container, not the in-process app.
+loadtest.py	locust -f tests/load/loadtest.py --host=http://localhost:8000 then open http://localhost:8089, or headless: locust -f tests/load/loadtest.py --host=http://localhost:8000 --users 20 --spawn-rate 2 --run-time 5m --headless	Needs the app actually running (Docker container or dev server) at that host. I added locust to requirements.txt since it wasn't pinned anywhere but the script imports it directly.
+
+
+
+cd D:\tinyagentos
+docker compose -f docker/docker-compose.yml --env-file .env ps

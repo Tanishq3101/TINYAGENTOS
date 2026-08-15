@@ -54,7 +54,7 @@ _MULTIPROC_DIR = os.environ.get("PROMETHEUS_MULTIPROC_DIR")
 def _get_registry() -> CollectorRegistry:
     if _MULTIPROC_DIR:
         registry = CollectorRegistry()
-        multiprocess.MultiProcessCollector(registry)
+        multiprocess.MultiProcessCollector(registry)  # type: ignore[no-untyped-call]
         return registry
     return REGISTRY
 
@@ -68,6 +68,12 @@ def _get_registry() -> CollectorRegistry:
 # they're safe.
 # ---------------------------------------------------------------------------
 
+# This is the live task counter: incremented directly in
+# core/orchestrator.py's execute_pipeline() on both the completed and
+# failed paths. infrastructure/monitoring.py previously defined an
+# unused, never-called Counter under this same name (task_counter) --
+# that one has been removed rather than this one renamed, since this
+# is the collector orchestrator.py actually calls.
 TASKS_TOTAL = Counter(
     "tinyagentos_tasks_total",
     "Total tasks processed, by task type and terminal status",
@@ -94,6 +100,10 @@ AGENT_STEP_ERRORS_TOTAL = Counter(
     ["agent_name"],
 )
 
+# Live gauge: inc()/dec() directly in core/orchestrator.py around
+# RUNNING-state transitions (_get_task_for_execution / execute_pipeline).
+# infrastructure/monitoring.py previously defined an unused, never-called
+# Gauge under this same name -- removed there rather than renamed here.
 ACTIVE_TASKS = Gauge(
     "tinyagentos_active_tasks",
     "Tasks currently in RUNNING state",

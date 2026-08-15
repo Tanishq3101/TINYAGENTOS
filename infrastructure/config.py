@@ -100,6 +100,32 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # -------------------------
+    # Concurrency (orchestrator + inference)
+    # -------------------------
+    # Single source of truth for how many execute_pipeline() calls may
+    # run concurrently (Orchestrator._execution_semaphore). With one
+    # shared llama.cpp context (LLMRuntime is a singleton with a single
+    # inference lock), 1 is correct until inference moves to multiple
+    # worker processes. Previously hardcoded as
+    # max_concurrent_executions=1 in Orchestrator.__init__'s default
+    # arg -- moved here so scaling decisions (replicas, worker counts)
+    # become config changes, not code changes.
+    WORKERS: int = 1
+
+    # How long LLMRuntime.generate() will wait to acquire the shared
+    # inference lock before giving up and raising, rather than blocking
+    # indefinitely. Exists because Future.cancel() on a timed-out
+    # orchestrator step does NOT stop the underlying thread (Python
+    # threads can't be forcibly killed) -- an abandoned thread can still
+    # be holding this lock long after the orchestrator has freed its own
+    # _execution_semaphore slot and admitted a new task. Bounding this
+    # wait turns "new task silently hangs behind an orphaned call" into
+    # a fast, clear failure instead -- same "reject, don't silently
+    # queue" principle as OrchestratorBusyError, applied at the actual
+    # bottleneck one layer down.
+    INFERENCE_LOCK_TIMEOUT_SECONDS: float = 30.0
+
+    # -------------------------
     # Monitoring / Stall Watchdog (DAY 20)
     # -------------------------
     # Defaults match infrastructure/stall_watchdog.py's own hardcoded

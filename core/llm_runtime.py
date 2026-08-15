@@ -47,6 +47,33 @@ class ModelNotLoadedError(RuntimeError):
     an unhandled 500."""
 
 
+class InferenceLockTimeoutError(RuntimeError):
+    """Raised by generate() when the shared inference lock could not be
+    acquired within settings.INFERENCE_LOCK_TIMEOUT_SECONDS.
+
+    Why this exists: Orchestrator._resolve_future() times out a slow
+    step and calls future.cancel() -- but Future.cancel() cannot stop a
+    thread that has already started running (Python threads aren't
+    forcibly killable). That abandoned thread can still be inside
+    self.model(...), holding _inference_lock, long after the
+    orchestrator has released its own _execution_semaphore slot and
+    admitted a fresh task. Without this timeout, the new task's
+    generate() call would block on `with self._inference_lock:`
+    indefinitely -- the exact "invisible queue" bug admission control
+    was built to eliminate, just one layer deeper (at the real lock
+    instead of the orchestrator's bookkeeping semaphore).
+
+    This makes that wait bounded and loud instead: fail fast with a
+    clear, catchable error so the caller (agent.execute() ->
+    Orchestrator._run_agent_step(), which already treats any exception
+    from agent.execute() as a failed step -- see its docstring) gets an
+    honest failure rather than a silent hang. This is NOT true
+    preemption -- the orphaned thread underneath keeps running until
+    its own self.model(...) call finishes; that would require running
+    inference in a separate, killable process, which is a bigger
+    architectural change than this patch."""
+
+
 class LLMRuntime:
     _instance: Optional["LLMRuntime"] = None
     # MYPY FIX (was: "Cannot determine type of _initialized" [has-type]):
@@ -174,13 +201,35 @@ class LLMRuntime:
             # extractor in parallel) previously crashed the whole process
             # with a native GGML_ASSERT rather than raising a Python
             # exception.
-            with self._inference_lock:
+            #
+            # PATCHED (bounded wait): previously this was an unconditional
+            # `with self._inference_lock:`, which blocks indefinitely.
+            # That's fine when every holder releases promptly, but a step
+            # that the orchestrator has already given up on and timed out
+            # (see InferenceLockTimeoutError's docstring) can still be
+            # holding this exact lock, for as long as its own
+            # self.model(...) call takes. A bounded acquire turns that
+            # into a fast, clear failure instead of a second, invisible
+            # queue sitting underneath the orchestrator's own admission
+            # control.
+            lock_timeout = getattr(self.settings, "INFERENCE_LOCK_TIMEOUT_SECONDS", 30.0)
+            acquired = self._inference_lock.acquire(timeout=lock_timeout)
+            if not acquired:
+                raise InferenceLockTimeoutError(
+                    f"Timed out after {lock_timeout}s waiting for the shared "
+                    "inference lock -- another call is still running (possibly "
+                    "an orphaned step the orchestrator already gave up on). "
+                    "Try again shortly."
+                )
+            try:
                 output = self.model(
                     formatted_prompt,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     stop=self._STOP_TOKENS,
                 )
+            finally:
+                self._inference_lock.release()
 
             # ✅ SAFE LOGGING (prevents Windows encoding crash)
             try:

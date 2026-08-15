@@ -238,11 +238,21 @@ def test_summarize_only_pipeline():
     print(f"Summary: {summary}")
 
 
+@pytest.mark.slow
 def test_full_pipeline_exercises_all_three_agents():
     """The important one: this is the only test path that runs
     summarizer + extractor concurrently (through the orchestrator's
     thread pool) and then critic -- exercising llm_runtime.py's
-    _inference_lock under real concurrent load, not just in theory."""
+    _inference_lock under real concurrent load, not just in theory.
+
+    Marked slow: this is real, unmocked, serialized inference (three
+    generate() calls) against the single shared LLMRuntime lock. Run
+    in the same session as 280+ other tests, it inherits whatever lock
+    contention those left behind -- see pyproject.toml's marker
+    registration comment for the 2026-08-15 flake this caused. Run
+    separately via `pytest -m slow` against a freshly-started
+    container, not as part of the default `pytest -m "not slow"` loop.
+    """
     body = _create_and_execute(
         "full_pipeline",
         "The quick brown fox jumps over the lazy dog. This is a test "
@@ -287,11 +297,15 @@ def test_invalid_task_type_is_rejected():
     assert resp.status_code == 500
 
 
+@pytest.mark.slow
 def test_full_pipeline_evaluation_lists_are_clean_phrases():
     """Regression guard for the critic prompt/parsing fix -- if this
     starts failing, the model drifted back to writing full sentences
     with 'and' joiners instead of comma-separated phrases, or the
-    _split_list cleanup regressed."""
+    _split_list cleanup regressed.
+
+    Marked slow -- see test_full_pipeline_exercises_all_three_agents's
+    docstring above for why."""
     body = _create_and_execute(
         "full_pipeline",
         "Artificial intelligence is transforming how software gets built, "

@@ -62,6 +62,7 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from core.pipeline import StepExecutionError  # re-used exception type
+from infrastructure.config import get_settings
 
 # ---------------------------------------------------------------------------
 # Optional infrastructure integrations.
@@ -127,6 +128,7 @@ __all__ = [
     "InvalidTaskInputError",
     "TaskNotFoundError",
     "TaskAlreadyRunningError",
+    "OrchestratorBusyError",
     "Orchestrator",
 ]
 
@@ -277,6 +279,30 @@ class TaskAlreadyRunningError(OrchestratorError):
     """Raised when execute_pipeline() is called on a task already RUNNING."""
 
 
+class OrchestratorBusyError(OrchestratorError):
+    """Raised when execute_pipeline() is called while the orchestrator is
+    already running its configured maximum number of concurrent
+    pipelines.
+
+    Why this exists: agent.execute() ultimately serializes through
+    LLMRuntime's single inference lock (see llm_runtime.py) -- with
+    WORKERS=1, only one execute_pipeline() call can actually be doing
+    real work at a time. Before this, there was no cap anywhere on how
+    many execute_pipeline() calls could be in flight simultaneously, so
+    extra concurrent calls didn't fail -- they just silently queued
+    behind that lock, sometimes for minutes, with nothing surfaced to
+    the caller until (if ever) their turn came up. That made load-test
+    results at moderate concurrency impossible to read correctly: a
+    request "hanging" and a request "queued behind 20 others from an
+    earlier run" were indistinguishable from the outside.
+
+    Raising this immediately (instead of blocking) lets api/routes.py
+    return a fast 503 the moment capacity is exceeded, so callers get an
+    actionable signal and can retry/back off, instead of an open-ended
+    wait with no feedback.
+    """
+
+
 # Task types this orchestrator knows how to route. Matches
 # infrastructure/validators.py's TaskInput.task_type allowed values.
 SUPPORTED_TASK_TYPES = frozenset({"full_pipeline", "summarize", "extract", "evaluate"})
@@ -323,6 +349,7 @@ class Orchestrator:
         step_timeout_seconds: float = 60.0,
         enable_resource_checks: bool = True,
         max_parallel_workers: int = 4,
+        max_concurrent_executions: Optional[int] = None,
     ) -> None:
         """
         Args:
@@ -344,7 +371,26 @@ class Orchestrator:
                 is importable, refuse to start a pipeline when system
                 resources are critically low.
             max_parallel_workers: Size of the thread pool used to run
-                independent pipeline steps (summarize/extract) concurrently.
+                independent pipeline steps (summarize/extract) concurrently
+                *within* a single execute_pipeline() call. Unrelated to
+                max_concurrent_executions below -- this pool lets one
+                pipeline's summarize+extract steps overlap, it does not
+                govern how many pipelines run at once.
+            max_concurrent_executions: Hard cap on how many
+                execute_pipeline() calls may be actively running at once,
+                across all tasks. Should match (or be slightly above) the
+                real inference concurrency LLMRuntime can actually serve
+                -- with WORKERS=1 (one shared inference lock), 1 is
+                correct. Once this many executions are in flight, further
+                execute_pipeline() calls raise OrchestratorBusyError
+                immediately instead of blocking/queuing invisibly.
+                Defaults to None, which resolves to
+                infrastructure.config.get_settings().WORKERS at
+                construction time -- pass an explicit int here (e.g. in
+                tests) to override config without touching the
+                environment. Was previously hardcoded to 1; now a config
+                change (WORKERS in .env) is enough to retune this without
+                a code change.
         """
         if not isinstance(agents, dict):
             raise TypeError("agents must be a dict mapping agent name -> agent instance")
@@ -375,6 +421,21 @@ class Orchestrator:
             thread_name_prefix="tinyagentos-orchestrator",
         )
         self._closed = False
+
+        # Bounded admission control for execute_pipeline() -- see
+        # OrchestratorBusyError's docstring for why this exists. A
+        # plain (non-bounded) Semaphore is intentional here: this slot
+        # is always released in execute_pipeline()'s `finally`, exactly
+        # once per successful `acquire()`, so over-release (the risk a
+        # BoundedSemaphore guards against) isn't reachable via normal
+        # control flow.
+        # WIRED (was hardcoded to 1): resolve from infrastructure.config's
+        # WORKERS setting when the caller doesn't pass an explicit value,
+        # so capacity tuning is a .env change, not a code change.
+        if max_concurrent_executions is None:
+            max_concurrent_executions = get_settings().WORKERS
+        self._max_concurrent_executions = max(1, max_concurrent_executions)
+        self._execution_semaphore = threading.Semaphore(self._max_concurrent_executions)
 
         missing_standard_agents = [
             name for name in ("summarizer", "extractor", "critic") if name not in agents
@@ -483,20 +544,50 @@ class Orchestrator:
 
         Idempotent for already-completed tasks (returns cached results
         without re-running inference). Raises if the task is unknown,
-        already running, or the pipeline fails.
+        already running, the orchestrator is at its concurrent-execution
+        capacity, or the pipeline fails.
+
+        Raises:
+            OrchestratorBusyError: max_concurrent_executions pipelines
+                are already running. Raised immediately (never blocks) --
+                see OrchestratorBusyError's docstring for why.
         """
-        task = self._get_task_for_execution(task_id)
+        # Admission control wraps the *entire* method body, including the
+        # already-running/not-found checks below: acquiring first (before
+        # even looking up the task) means a 503 under load never has to
+        # wait behind other queued executions to find out it's a 503 --
+        # rejection is O(1), not "wait your turn in line to be told to
+        # go away." Released exactly once, in the `finally` below,
+        # regardless of which path this call takes (cache hit, 404, 409,
+        # success, or failure).
+        if not self._execution_semaphore.acquire(blocking=False):
+            raise OrchestratorBusyError(
+                f"Orchestrator is at capacity ({self._max_concurrent_executions} "
+                "concurrent execution(s) already running); try again shortly"
+            )
 
-        if task["status"] == TaskStatus.COMPLETED:
-            # MYPY FIX (was: "Returning Any from function declared to
-            # return dict[str, Any]"): task is typed Dict[str, Any], so
-            # task["results"] resolves to bare Any under strict mode's
-            # warn_return_any -- routing it through an explicitly
-            # annotated local lets mypy confirm the static type before
-            # the return, instead of returning unresolved Any directly.
-            cached_results: Dict[str, Any] = task["results"]
-            return cached_results
+        try:
+            task = self._get_task_for_execution(task_id)
 
+            if task["status"] == TaskStatus.COMPLETED:
+                # MYPY FIX (was: "Returning Any from function declared to
+                # return dict[str, Any]"): task is typed Dict[str, Any], so
+                # task["results"] resolves to bare Any under strict mode's
+                # warn_return_any -- routing it through an explicitly
+                # annotated local lets mypy confirm the static type before
+                # the return, instead of returning unresolved Any directly.
+                cached_results: Dict[str, Any] = task["results"]
+                return cached_results
+
+            return self._run_pipeline_for_task(task_id, task)
+        finally:
+            self._execution_semaphore.release()
+
+    def _run_pipeline_for_task(self, task_id: str, task: Dict[str, Any]) -> Dict[str, Any]:
+        """The actual pipeline-running body of execute_pipeline(), split
+        out so execute_pipeline() itself stays focused on admission
+        control (semaphore) + the cache-hit short-circuit. Behavior here
+        is unchanged from before the admission-control patch."""
         if self._enable_resource_checks:
             try:
                 if not ResourceMonitor.check_resource_availability():
@@ -676,6 +767,17 @@ class Orchestrator:
         try:
             return future.result(timeout=self._step_timeout_seconds)
         except FutureTimeoutError:
+            # future.cancel() is best-effort only: once the underlying
+            # thread pool worker has started running agent.execute() ->
+            # llm_runtime.generate(), Python threads cannot be forcibly
+            # stopped, so this returns False and the thread keeps running
+            # in the background -- it may still be holding LLMRuntime's
+            # inference lock well after this step is reported as failed.
+            # The real bound on that is llm_runtime.py's
+            # InferenceLockTimeoutError (see its docstring): the *next*
+            # caller to need that lock fails fast instead of queuing
+            # invisibly behind this orphaned call. True preemption would
+            # require running inference in a separate, killable process.
             future.cancel()
             return _StepOutcome(
                 agent_name,
