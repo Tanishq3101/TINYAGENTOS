@@ -206,7 +206,17 @@ class TestPipelineIntegration:
             return VALID_EXTRACTION_JSON
 
         llm.generate.side_effect = slow_inference
-        orch = Orchestrator(make_agents(llm))
+        # max_concurrent_executions=2 (not the default, which resolves to
+        # WORKERS=1 from settings): this test needs the *duplicate task_id*
+        # check (TaskAlreadyRunningError) to fire, not the orchestrator-wide
+        # capacity check (OrchestratorBusyError) -- at the default of 1,
+        # the main thread's execute_pipeline() call is rejected by the
+        # semaphore before it ever reaches the already-running check,
+        # since both errors look identical at capacity 1. Slack of 2
+        # lets the background thread hold one slot while the main
+        # thread's call proceeds far enough to hit the real check this
+        # test is targeting.
+        orch = Orchestrator(make_agents(llm), max_concurrent_executions=2)
         task_id = orch.create_task("Concurrency test")
 
         outcomes = {}

@@ -105,11 +105,27 @@ class FakeAgent:
         }
 
 
-def build_orchestrator(latency_ms: float = 5.0, max_parallel_workers: int = 4) -> Orchestrator:
+def build_orchestrator(
+    latency_ms: float = 5.0,
+    max_parallel_workers: int = 4,
+    max_concurrent_executions: int = 8,
+) -> Orchestrator:
     """Build an Orchestrator wired with fast, deterministic fake agents.
 
     `latency_ms` simulates per-agent-call cost (e.g. LLM inference time)
     so the orchestrator's concurrent-step optimization is measurable.
+
+    `max_parallel_workers` and `max_concurrent_executions` are different
+    knobs: the former governs concurrency *within* one pipeline
+    (summarize+extract overlapping), the latter governs how many
+    execute_pipeline() calls may run at once *across* tasks. Without
+    passing max_concurrent_executions explicitly here, Orchestrator
+    defaults it to infrastructure.config.get_settings().WORKERS (1 in
+    production, since real inference is serialized behind one lock) --
+    fine for prod, but silently caps this benchmark's throughput test at
+    1 regardless of the requested --concurrency, since fake agents have
+    no such serialization constraint to model. Defaulting to 8 here
+    matches this script's own --concurrency default.
     """
     latency_seconds = max(0.0, latency_ms) / 1000.0
 
@@ -143,6 +159,7 @@ def build_orchestrator(latency_ms: float = 5.0, max_parallel_workers: int = 4) -
         logger=None,
         enable_resource_checks=False,  # keep benchmarks environment-independent
         max_parallel_workers=max_parallel_workers,
+        max_concurrent_executions=max_concurrent_executions,
     )
 
 
@@ -275,7 +292,12 @@ def run_all_benchmarks(
 
     # Fresh orchestrator for the throughput run so accumulated task history
     # from the latency runs above doesn't skew TTL/eviction behavior.
-    throughput_orchestrator = build_orchestrator(latency_ms=latency_ms)
+    # max_concurrent_executions matches `concurrency` so the throughput
+    # measurement reflects the thread pool's actual concurrency, not an
+    # artificial cap from Orchestrator's own admission-control semaphore.
+    throughput_orchestrator = build_orchestrator(
+        latency_ms=latency_ms, max_concurrent_executions=concurrency
+    )
     try:
         throughput = benchmark_throughput(
             throughput_orchestrator, n_tasks=iterations * 2, concurrency=concurrency
