@@ -1,0 +1,88 @@
+{
+  "title": "TinyAgentOS",
+  "uid": "tinyagentos-overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Task throughput (per min, by status)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(tinyagentos_tasks_total[5m])) by (status) * 60",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Active tasks",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "tinyagentos_active_tasks" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Task duration p50 / p95 / p99 (seconds)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(tinyagentos_task_duration_seconds_bucket[5m])) by (le, task_type))",
+          "legendFormat": "p50 {{task_type}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(tinyagentos_task_duration_seconds_bucket[5m])) by (le, task_type))",
+          "legendFormat": "p95 {{task_type}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(tinyagentos_task_duration_seconds_bucket[5m])) by (le, task_type))",
+          "legendFormat": "p99 {{task_type}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Agent step p95 duration (seconds)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(tinyagentos_agent_step_duration_seconds_bucket[5m])) by (le, agent_name))",
+          "legendFormat": "{{agent_name}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Agent step errors (per min)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(rate(tinyagentos_agent_step_errors_total[5m])) by (agent_name) * 60",
+          "legendFormat": "{{agent_name}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Auth failures (per min)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "rate(tinyagentos_auth_failures_total[5m]) * 60",
+          "legendFormat": "failures/min"
+        }
+      ]
+    }
+  ]
+}

@@ -104,6 +104,22 @@ except ImportError:  # pragma: no cover - defensive
     # error that was never actually raised on this line.
     ResourceMonitor = None
 
+# Prometheus exporter. Guarded the same way as the optional pieces above:
+# a missing/broken prometheus_client must degrade to "no metrics", not
+# take down task execution -- observability is not on the critical path.
+try:
+    from infrastructure.prometheus_metrics import (
+        ACTIVE_TASKS,
+        AGENT_STEP_DURATION_SECONDS,
+        AGENT_STEP_ERRORS_TOTAL,
+        TASK_DURATION_SECONDS,
+        TASKS_TOTAL,
+    )
+
+    _PROMETHEUS_ENABLED = True
+except ImportError:  # pragma: no cover - defensive
+    _PROMETHEUS_ENABLED = False
+
 
 __all__ = [
     "TaskStatus",
@@ -492,6 +508,9 @@ class Orchestrator:
                     task["status"] = TaskStatus.FAILED
                     task["errors"].append("insufficient_resources")
                     task["updated_at"] = datetime.now()
+                if _PROMETHEUS_ENABLED:
+                    TASKS_TOTAL.labels(task_type=task["type"], status="failed").inc()
+                    ACTIVE_TASKS.dec()
                 raise
             except Exception:  # pragma: no cover - resource monitor itself misbehaved
                 self.logger.log_with_context(
@@ -500,6 +519,7 @@ class Orchestrator:
                     task_id=task_id,
                 )
 
+        _pipeline_start = time.monotonic()
         try:
             if task["type"] == "summarize":
                 results = self._run_summarize_only(task)
@@ -517,6 +537,13 @@ class Orchestrator:
                 task["completed_at"] = datetime.now()
                 task["updated_at"] = task["completed_at"]
 
+            if _PROMETHEUS_ENABLED:
+                TASK_DURATION_SECONDS.labels(task_type=task["type"]).observe(
+                    time.monotonic() - _pipeline_start
+                )
+                TASKS_TOTAL.labels(task_type=task["type"], status="completed").inc()
+                ACTIVE_TASKS.dec()
+
             self.logger.log_with_context("info", "Pipeline completed successfully", task_id=task_id)
             return results
 
@@ -526,6 +553,13 @@ class Orchestrator:
                 task["status"] = TaskStatus.FAILED
                 task["errors"].append(sanitized)
                 task["updated_at"] = datetime.now()
+
+            if _PROMETHEUS_ENABLED:
+                TASK_DURATION_SECONDS.labels(task_type=task["type"]).observe(
+                    time.monotonic() - _pipeline_start
+                )
+                TASKS_TOTAL.labels(task_type=task["type"], status="failed").inc()
+                ACTIVE_TASKS.dec()
 
             self.logger.log_with_context(
                 "error",
@@ -606,6 +640,11 @@ class Orchestrator:
             # own exceptions and return {'status': 'error', ...}; this branch
             # only triggers if an agent implementation violates that contract.
             duration_ms = (time.monotonic() - start) * 1000
+            if _PROMETHEUS_ENABLED:
+                AGENT_STEP_DURATION_SECONDS.labels(agent_name=agent_name).observe(
+                    duration_ms / 1000
+                )
+                AGENT_STEP_ERRORS_TOTAL.labels(agent_name=agent_name).inc()
             self.logger.log_with_context(
                 "error",
                 f"Agent '{agent_name}' raised outside its error contract",
@@ -616,12 +655,17 @@ class Orchestrator:
             return _StepOutcome(agent_name, success=False, error=str(exc), duration_ms=duration_ms)
 
         duration_ms = (time.monotonic() - start) * 1000
+        if _PROMETHEUS_ENABLED:
+            AGENT_STEP_DURATION_SECONDS.labels(agent_name=agent_name).observe(duration_ms / 1000)
+
         if not isinstance(result, dict) or result.get("status") != "success":
             error_msg = (
                 result.get("error", "unknown agent error")
                 if isinstance(result, dict)
                 else "agent returned a non-dict result"
             )
+            if _PROMETHEUS_ENABLED:
+                AGENT_STEP_ERRORS_TOTAL.labels(agent_name=agent_name).inc()
             return _StepOutcome(agent_name, success=False, error=error_msg, duration_ms=duration_ms)
 
         return _StepOutcome(
@@ -675,6 +719,8 @@ class Orchestrator:
             if task["status"] != TaskStatus.COMPLETED:
                 task["status"] = TaskStatus.RUNNING
                 task["updated_at"] = datetime.now()
+                if _PROMETHEUS_ENABLED:
+                    ACTIVE_TASKS.inc()
             return task
 
     def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:

@@ -33,6 +33,13 @@ from infrastructure.logging import logger
 from infrastructure.security import SecurityManager
 from storage.database import Database
 
+try:
+    from infrastructure.prometheus_metrics import AUTH_FAILURES_TOTAL
+
+    _PROMETHEUS_ENABLED = True
+except ImportError:  # pragma: no cover - defensive, same pattern as orchestrator.py
+    _PROMETHEUS_ENABLED = False
+
 
 @lru_cache()
 def get_database() -> Database:
@@ -94,6 +101,8 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)) -> str:
 
     if not x_api_key:
         logger.warning("Missing X-API-Key header")
+        if _PROMETHEUS_ENABLED:
+            AUTH_FAILURES_TOTAL.inc()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing X-API-Key header",
@@ -118,6 +127,8 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)) -> str:
 
     if api_key_row is None or not SecurityManager.verify_api_key(x_api_key, api_key_row.key_hash):
         logger.warning("API key not recognized")
+        if _PROMETHEUS_ENABLED:
+            AUTH_FAILURES_TOTAL.inc()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",
@@ -126,6 +137,8 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)) -> str:
 
     if api_key_row.revoked:
         logger.warning(f"Revoked API key used: {api_key_row.id}")
+        if _PROMETHEUS_ENABLED:
+            AUTH_FAILURES_TOTAL.inc()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="API key has been revoked",

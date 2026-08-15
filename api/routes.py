@@ -32,6 +32,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
 from datetime import datetime
 
+from starlette.responses import Response
+
 from api.dependencies import verify_api_key, get_orchestrator, get_database
 from api.limiter import limiter
 from api.schemas import TaskRequest, TaskResponse
@@ -40,6 +42,7 @@ from core.llm_runtime import LLMRuntime, ModelNotLoadedError
 from infrastructure.config import get_settings
 from infrastructure.logging import logger
 from infrastructure.security import SecurityManager
+from infrastructure.prometheus_metrics import render_metrics
 from storage.database import Database
 
 # ========================================
@@ -58,6 +61,31 @@ from storage.database import Database
 # ========================================
 
 router = APIRouter(prefix="/api/v1", tags=["tasks"])
+
+# Separate, unprefixed router for /metrics. Prometheus's default scrape
+# convention is a bare /metrics path (not /api/v1/metrics), and the
+# endpoint is intentionally unauthenticated -- verify_api_key would
+# require every Prometheus scrape config to carry an API key, and
+# scrape targets are normally reached only from inside the deployment
+# network, not exposed the way the task API is. If that's not true for
+# your deployment, put this behind a reverse-proxy allowlist or add
+# Depends(verify_api_key) here.
+#
+# Must be included separately in api/app.py:
+#   from api.routes import router, metrics_router
+#   app.include_router(router)
+#   app.include_router(metrics_router)
+metrics_router = APIRouter(tags=["observability"])
+
+
+@metrics_router.get("/metrics")
+async def metrics() -> Response:
+    """Prometheus scrape endpoint. Returns current counters/histograms
+    in Prometheus text exposition format (see infrastructure/prometheus_metrics.py
+    for what's actually instrumented -- task counts/duration, per-agent
+    step duration/errors, active task gauge)."""
+    body, content_type = render_metrics()
+    return Response(content=body, media_type=content_type)
 
 
 # ========================================

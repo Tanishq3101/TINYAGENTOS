@@ -10,7 +10,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from api.limiter import limiter
-from api.routes import router
+from api.routes import router, metrics_router
 from api.middleware import LoggingMiddleware
 from infrastructure.config import get_settings
 from infrastructure.logging import logger
@@ -122,6 +122,10 @@ app.add_middleware(LoggingMiddleware)
 # ========================================
 
 app.include_router(router)
+# Unauthenticated on purpose -- see the comment on metrics_router in
+# api/routes.py for why, and what to change if /metrics needs to be
+# reachable from outside the compose network.
+app.include_router(metrics_router)
 
 
 # ========================================

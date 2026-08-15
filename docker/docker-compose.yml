@@ -7,10 +7,12 @@
 #      pydantic-settings silently ignores unrecognized env var names and
 #      falls back to field defaults, so those would have quietly done
 #      nothing rather than erroring.
-#   2. Removed the redis and prometheus services. Nothing in Settings,
-#      storage/, or infrastructure/ currently talks to either -- add them
-#      back (and wire real usage into storage/cache.py / metrics) when
-#      there's something that actually needs them.
+#   2. Removed the redis service — nothing in Settings, storage/, or
+#      infrastructure/ currently talks to it, so there's still nothing
+#      for it to do. The prometheus/grafana services below are back,
+#      though: api/routes.py now exposes a real /metrics endpoint
+#      (infrastructure/prometheus_metrics.py) that orchestrator.py
+#      actually instruments, so there's something to scrape now.
 #
 # SECRET_KEY has no safe default in Settings (by design -- the app
 # refuses to start without one, see config.py's field_validator). Put a
@@ -66,9 +68,45 @@ services:
     networks:
       - tinyagentos-network
 
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    # Relative to THIS file's location (docker/), same convention as the
+    # ../models volume above -- these paths are docker/prometheus.yml and
+    # docker/grafana/provisioning/, not project-root-relative.
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - tinyagentos
+    restart: unless-stopped
+    networks:
+      - tinyagentos-network
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    environment:
+      # Change this -- same rule as SECRET_KEY/FERNET_KEY above, don't
+      # leave the default in anything that isn't purely local.
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - tinyagentos-network
+
 networks:
   tinyagentos-network:
     driver: bridge
 
 volumes:
   tinyagentos_logs:
+  prometheus_data:
+  grafana_data:

@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: tinyagentos
+    metrics_path: /metrics
+    static_configs:
+      # "tinyagentos" is the service name from docker-compose.yml --
+      # Docker's internal DNS resolves it within the compose network.
+      # Change the port if your app doesn't listen on 8000.
+      - targets: ["tinyagentos:8000"]
